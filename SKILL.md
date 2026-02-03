@@ -33,10 +33,20 @@ python3 scripts/xpost.py delete <tweet_id>
 
 ```bash
 python3 scripts/xpost.py get <tweet_id>              # Single tweet
-python3 scripts/xpost.py thread <tweet_id>            # Conversation thread
+python3 scripts/xpost.py thread <tweet_id>            # Conversation replies
+python3 scripts/xpost.py thread-chain <tweet_id>      # Author's full thread (chronological)
+python3 scripts/xpost.py quotes <tweet_id>            # Quote tweets of a tweet
 python3 scripts/xpost.py search "query" -n 20         # Recent tweets (default 10)
 python3 scripts/xpost.py mentions -n 10               # Your mentions
 python3 scripts/xpost.py timeline -n 10               # Home timeline
+```
+
+### Research
+
+```bash
+python3 scripts/xpost.py user <username>              # Profile lookup (bio, metrics)
+python3 scripts/xpost.py user-timeline <user> -n 10   # Someone's recent tweets
+python3 scripts/xpost.py user-timeline <user> --include-rts  # Include retweets
 ```
 
 ### Engage
