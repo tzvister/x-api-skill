@@ -17,6 +17,10 @@ Usage:
   python3 scripts/xpost.py search "query" [-n 10]
   python3 scripts/xpost.py mentions [-n 10]
   python3 scripts/xpost.py timeline [-n 10]
+  python3 scripts/xpost.py user <username>
+  python3 scripts/xpost.py user-timeline <username> [-n 10] [--include-rts]
+  python3 scripts/xpost.py thread-chain <tweet-id> [-n 20]
+  python3 scripts/xpost.py quotes <tweet-id> [-n 10]
   python3 scripts/xpost.py profile "new bio text"
   python3 scripts/xpost.py delete <tweet-id>
   python3 scripts/xpost.py verify
@@ -144,11 +148,44 @@ def cmd_me(args):
 def cmd_search(args):
     client = get_client()
     n = max(args.n, 10)  # API minimum is 10
-    results = client.posts.search_recent(query=args.query, max_results=n)
-    for page in results:
-        for tweet in (page.data or []):
+    try:
+        results = client.posts.search_recent(query=args.query, max_results=n)
+        for page in results:
+            data = getattr(page, 'data', None) or []
+            if not data:
+                # Try dict-style access as fallback
+                if hasattr(page, '__iter__'):
+                    for tweet in page:
+                        print(json.dumps(tweet, indent=2, default=str))
+                break
+            for tweet in data:
+                print(json.dumps(tweet, indent=2, default=str))
+            break  # First page only
+    except Exception as e:
+        # Fallback to raw request for search
+        import requests
+        auth = get_oauth1()
+        params = {
+            "query": args.query,
+            "max_results": n,
+            "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
+            "expansions": "author_id",
+            "user.fields": "username,name",
+        }
+        resp = requests.get(f"{API_BASE}/tweets/search/recent", params=params, auth=auth)
+        if not resp.ok:
+            print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+            sys.exit(1)
+        data = resp.json()
+        users = {}
+        if "includes" in data and "users" in data["includes"]:
+            users = {u["id"]: u for u in data["includes"]["users"]}
+        for tweet in (data.get("data") or []):
+            author = users.get(tweet.get("author_id", ""), {})
+            tweet["author"] = {"username": author.get("username"), "name": author.get("name")}
             print(json.dumps(tweet, indent=2, default=str))
-        break  # First page only
+        if not data.get("data"):
+            print("No results found.", file=sys.stderr)
 
 
 def _get_my_id(client):
@@ -398,6 +435,141 @@ def cmd_unretweet(args):
     print(json.dumps(resp.json(), indent=2, default=str))
 
 
+def cmd_user(args):
+    """Look up a user's profile by username."""
+    import requests
+    auth = get_oauth1()
+    target = args.username.lstrip("@")
+    params = {
+        "user.fields": "created_at,description,location,public_metrics,verified,url,pinned_tweet_id",
+    }
+    resp = requests.get(f"{API_BASE}/users/by/username/{target}", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json().get("data", resp.json())
+    print(json.dumps(data, indent=2, default=str))
+
+
+def cmd_user_timeline(args):
+    """Fetch recent tweets from a specific user."""
+    import requests
+    auth = get_oauth1()
+    # Resolve username to ID
+    target = args.username.lstrip("@")
+    resp = requests.get(f"{API_BASE}/users/by/username/{target}", auth=auth)
+    if not resp.ok:
+        print(f"Error resolving @{target}: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    user_id = resp.json()["data"]["id"]
+    # Fetch their tweets
+    n = max(args.n, 5)
+    params = {
+        "max_results": n,
+        "tweet.fields": "created_at,author_id,conversation_id,in_reply_to_user_id,text,public_metrics",
+        "exclude": "retweets" if not args.include_rts else "",
+    }
+    if not params["exclude"]:
+        del params["exclude"]
+    resp = requests.get(f"{API_BASE}/users/{user_id}/tweets", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    for tweet in (data.get("data") or []):
+        tweet["author"] = {"username": target}
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print(f"No tweets found for @{target}.", file=sys.stderr)
+
+
+def cmd_thread_chain(args):
+    """Walk an author's full thread chain starting from a tweet.
+    Follows the conversation_id and filters to only the original author's tweets,
+    ordered chronologically."""
+    import requests
+    auth = get_oauth1()
+    # Get the starting tweet
+    resp = requests.get(
+        f"{API_BASE}/tweets/{args.tweet_id}",
+        params={
+            "tweet.fields": "conversation_id,author_id,created_at,text,public_metrics",
+            "expansions": "author_id",
+            "user.fields": "username,name",
+        },
+        auth=auth,
+    )
+    if not resp.ok:
+        print(f"Error fetching tweet: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    result = resp.json()
+    tweet_data = result.get("data", {})
+    convo_id = tweet_data.get("conversation_id", args.tweet_id)
+    author_id = tweet_data.get("author_id", "")
+    # Resolve author username
+    users = {}
+    if "includes" in result and "users" in result["includes"]:
+        users = {u["id"]: u for u in result["includes"]["users"]}
+    author_username = users.get(author_id, {}).get("username", "unknown")
+
+    # Search for all tweets in conversation by same author
+    n = max(args.n, 10)
+    params = {
+        "query": f"conversation_id:{convo_id} from:{author_username}",
+        "tweet.fields": "created_at,author_id,in_reply_to_user_id,text,public_metrics",
+        "max_results": n,
+        "sort_order": "recency",
+    }
+    resp = requests.get(f"{API_BASE}/tweets/search/recent", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error searching thread: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    tweets = data.get("data") or []
+
+    # Add the root tweet if it's not in results (it's the conversation starter)
+    root_ids = {t["id"] for t in tweets}
+    if convo_id not in root_ids:
+        tweets.append(tweet_data)
+
+    # Sort chronologically
+    tweets.sort(key=lambda t: t.get("created_at", ""))
+
+    for tweet in tweets:
+        tweet["author"] = {"username": author_username}
+        print(json.dumps(tweet, indent=2, default=str))
+
+    if not tweets:
+        print(f"No thread found for conversation {convo_id}.", file=sys.stderr)
+
+
+def cmd_quotes(args):
+    """Fetch quote tweets of a specific tweet."""
+    import requests
+    auth = get_oauth1()
+    n = max(args.n, 10)
+    params = {
+        "max_results": n,
+        "tweet.fields": "created_at,author_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(f"{API_BASE}/tweets/{args.tweet_id}/quote_tweets", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    users = {}
+    if "includes" in data and "users" in data["includes"]:
+        users = {u["id"]: u for u in data["includes"]["users"]}
+    for tweet in (data.get("data") or []):
+        author = users.get(tweet.get("author_id", ""), {})
+        tweet["author"] = {"username": author.get("username"), "name": author.get("name")}
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print("No quote tweets found.", file=sys.stderr)
+
+
 def cmd_delete(args):
     result = _delete_tweet(args.tweet_id)
     print(json.dumps(result, indent=2, default=str))
@@ -452,6 +624,22 @@ def main():
     p_unretweet = sub.add_parser("unretweet", help="Undo a retweet")
     p_unretweet.add_argument("tweet_id", help="Tweet ID to unretweet")
 
+    p_user = sub.add_parser("user", help="Look up a user's profile")
+    p_user.add_argument("username", help="Username to look up (with or without @)")
+
+    p_user_tl = sub.add_parser("user-timeline", help="Get a user's recent tweets")
+    p_user_tl.add_argument("username", help="Username (with or without @)")
+    p_user_tl.add_argument("-n", type=int, default=10, help="Max results")
+    p_user_tl.add_argument("--include-rts", action="store_true", help="Include retweets")
+
+    p_thread_chain = sub.add_parser("thread-chain", help="Walk an author's full thread")
+    p_thread_chain.add_argument("tweet_id", help="Any tweet ID in the thread")
+    p_thread_chain.add_argument("-n", type=int, default=20, help="Max results")
+
+    p_quotes = sub.add_parser("quotes", help="Get quote tweets of a tweet")
+    p_quotes.add_argument("tweet_id", help="Tweet ID")
+    p_quotes.add_argument("-n", type=int, default=10, help="Max results")
+
     p_delete = sub.add_parser("delete", help="Delete a tweet")
     p_delete.add_argument("tweet_id", help="Tweet ID to delete")
 
@@ -473,6 +661,10 @@ def main():
         "follow": cmd_follow,
         "retweet": cmd_retweet,
         "unretweet": cmd_unretweet,
+        "user": cmd_user,
+        "user-timeline": cmd_user_timeline,
+        "thread-chain": cmd_thread_chain,
+        "quotes": cmd_quotes,
         "delete": cmd_delete,
     }
 
