@@ -7,9 +7,11 @@ Built as an [OpenClaw](https://openclaw.ai) / [AgentSkills](https://agentskills.
 ## Why xpost?
 
 - **Proper OAuth 1.0a** — no cookie scraping, no browser sessions
-- **Full X API v2** — tweet, reply, search, threads, likes, retweets, follows
-- **Mute, block, bookmarks** — full moderation and bookmark management
+- **Full X API v2** — tweet, reply, search, threads, likes, retweets, follows, DMs
+- **Social graph** — followers, following, liked tweets, liking users, retweeters
+- **Mute, block, bookmarks, lists** — full moderation, bookmark folders, and list management
 - **Streaming & full-archive** — filtered stream, volume stream, and historical search (Pro)
+- **Trends & Spaces** — location-based trends and Spaces search/lookup
 - **Single script** — one Python file, minimal dependencies
 - **Agent-native** — JSON output, skill metadata, install script
 
@@ -53,7 +55,7 @@ export X_ACCESS_TOKEN="..."
 export X_ACCESS_TOKEN_SECRET="..."
 ```
 
-Covers: tweet, reply, delete, like, unlike, retweet, follow, mute, block, search, timelines, user lookup.
+Covers: tweet, reply, delete, like, unlike, retweet, follow/unfollow, mute, block, search, timelines, user lookup, followers, following, liked tweets, DMs, lists, hide replies.
 
 ### Bearer Token (optional — streams & full-archive search)
 
@@ -83,7 +85,7 @@ python3 scripts/xpost.py auth
 
 This opens your browser for authorization and stores tokens in `~/.xpost/tokens.json`. Tokens auto-refresh when expired.
 
-Required for: `bookmarks`, `bookmark`, `unbookmark`.
+Required for: `bookmarks`, `bookmark`, `unbookmark`, `bookmark-folders`, `bookmarks-folder`.
 
 ## Commands
 
@@ -108,6 +110,11 @@ python3 $xpost timeline -n 10
 python3 $xpost user <username>
 python3 $xpost user-timeline <username> -n 10
 python3 $xpost user-timeline <username> --include-rts
+python3 $xpost followers <username> -n 100
+python3 $xpost following <username> -n 100
+python3 $xpost liked <username> -n 20
+python3 $xpost liking-users <tweet_id>
+python3 $xpost retweeters <tweet_id>
 
 # Engage
 python3 $xpost like <tweet_id>
@@ -115,6 +122,11 @@ python3 $xpost unlike <tweet_id>
 python3 $xpost retweet <tweet_id>
 python3 $xpost unretweet <tweet_id>
 python3 $xpost follow <username>
+python3 $xpost unfollow <username>
+
+# Hide / Unhide replies
+python3 $xpost hide <tweet_id>
+python3 $xpost unhide <tweet_id>
 
 # Moderate
 python3 $xpost mute <username>
@@ -122,11 +134,35 @@ python3 $xpost unmute <username>
 python3 $xpost block <username>
 python3 $xpost unblock <username>
 
+# Direct Messages
+python3 $xpost dm <username> "Hello!"
+python3 $xpost dm-list -n 20
+python3 $xpost dm-conversation <conversation_id> -n 20
+
 # Bookmarks (run 'auth' first)
 python3 $xpost auth
 python3 $xpost bookmarks -n 20
 python3 $xpost bookmark <tweet_id>
 python3 $xpost unbookmark <tweet_id>
+python3 $xpost bookmark-folders
+python3 $xpost bookmarks-folder <folder_id> -n 20
+
+# Lists
+python3 $xpost my-lists
+python3 $xpost list <list_id>
+python3 $xpost list-create "My List" --description "desc" --private
+python3 $xpost list-delete <list_id>
+python3 $xpost list-tweets <list_id> -n 20
+python3 $xpost list-members <list_id>
+python3 $xpost list-add-member <list_id> <username>
+python3 $xpost list-remove-member <list_id> <username>
+
+# Trends
+python3 $xpost trends --woeid 1
+
+# Spaces
+python3 $xpost spaces "music"
+python3 $xpost space <space_id>
 
 # Streams (Pro access)
 python3 $xpost stream-rules-add "keyword" --tag "label"

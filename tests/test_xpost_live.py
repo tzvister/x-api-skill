@@ -105,6 +105,70 @@ class TestReadCommands:
         r = xpost("user-timeline", self.LOOKUP_USER, "-n", "5", "--include-rts")
         assert r.ok, f"user-timeline --include-rts failed: {r.stderr}"
 
+    def test_followers(self, xpost):
+        r = xpost("followers", self.LOOKUP_USER, "-n", "10")
+        if not r.ok:
+            _tier_guard(r, "followers")
+            return
+        users = r.json_all()
+        assert len(users) > 0, "Expected at least 1 follower"
+
+    def test_following(self, xpost):
+        r = xpost("following", self.LOOKUP_USER, "-n", "10")
+        if not r.ok:
+            _tier_guard(r, "following")
+            return
+        users = r.json_all()
+        assert len(users) > 0, "Expected at least 1 following"
+
+    def test_liked(self, xpost):
+        r = xpost("liked", self.LOOKUP_USER, "-n", "5")
+        if not r.ok:
+            _tier_guard(r, "liked")
+            return
+        # May have no liked tweets depending on the user
+
+    def test_liking_users(self, xpost):
+        """Needs a tweet ID that has likes. Post one, like it, then check."""
+        tag = uuid.uuid4().hex[:8]
+        r = xpost("tweet", f"liking-users test {tag}")
+        if not r.ok:
+            _tier_guard(r, "tweet (for liking-users)")
+            return
+        tweet_id = r.json()["data"]["id"]
+        try:
+            time.sleep(1)
+            xpost("like", tweet_id)
+            time.sleep(1)
+            r = xpost("liking-users", tweet_id)
+            if not r.ok:
+                _tier_guard(r, "liking-users")
+                return
+            # May or may not find users depending on indexing delay
+        finally:
+            xpost("unlike", tweet_id)
+            xpost("delete", tweet_id)
+
+    def test_retweeters(self, xpost):
+        """Needs a tweet with retweets. We post+retweet, then query."""
+        tag = uuid.uuid4().hex[:8]
+        r = xpost("tweet", f"retweeters test {tag}")
+        if not r.ok:
+            _tier_guard(r, "tweet (for retweeters)")
+            return
+        tweet_id = r.json()["data"]["id"]
+        try:
+            time.sleep(1)
+            xpost("retweet", tweet_id)
+            time.sleep(1)
+            r = xpost("retweeters", tweet_id)
+            if not r.ok:
+                _tier_guard(r, "retweeters")
+                return
+        finally:
+            xpost("unretweet", tweet_id)
+            xpost("delete", tweet_id)
+
     def test_search(self, xpost):
         r = xpost("search", "python programming", "-n", "10")
         assert r.ok, f"search failed: {r.stderr}"
@@ -273,12 +337,17 @@ class TestEngagement:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestFollow:
-    """Test following a user. Uses TEST_TARGET_USERNAME."""
+    """Test follow/unfollow. Uses TEST_TARGET_USERNAME."""
 
-    def test_follow(self, xpost, target_username):
+    def test_follow_unfollow(self, xpost, target_username):
         r = xpost("follow", target_username)
         if not r.ok:
             _tier_guard(r, "follow")
+            return
+        time.sleep(1)
+        r = xpost("unfollow", target_username)
+        if not r.ok:
+            _tier_guard(r, "unfollow")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -315,6 +384,68 @@ class TestModeration:
         r = xpost("unblock", target_username)
         if not r.ok:
             _tier_guard(r, "unblock")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Group 6b: Hide / Unhide Replies
+# ═══════════════════════════════════════════════════════════════════
+
+class TestHideReplies:
+    """Test hide/unhide replies. Creates a tweet + reply, hides, then unhides."""
+
+    def test_hide_unhide(self, xpost):
+        tag = uuid.uuid4().hex[:8]
+        r = xpost("tweet", f"hide test parent {tag}")
+        if not r.ok:
+            _tier_guard(r, "tweet (for hide test)")
+            return
+        tweet_id = r.json()["data"]["id"]
+
+        try:
+            time.sleep(1)
+            r = xpost("reply", tweet_id, f"reply to hide {tag}")
+            if not r.ok:
+                _tier_guard(r, "reply (for hide test)")
+                return
+            reply_id = r.json()["data"]["id"]
+
+            try:
+                time.sleep(1)
+                # Hide
+                r = xpost("hide", reply_id)
+                if not r.ok:
+                    _tier_guard(r, "hide")
+                    return
+
+                time.sleep(1)
+                # Unhide
+                r = xpost("unhide", reply_id)
+                if not r.ok:
+                    _tier_guard(r, "unhide")
+            finally:
+                xpost("delete", reply_id)
+        finally:
+            xpost("delete", tweet_id)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Group 6c: Direct Messages
+# ═══════════════════════════════════════════════════════════════════
+
+class TestDirectMessages:
+    """Test DM commands. May require elevated app permissions."""
+
+    def test_dm_list(self, xpost):
+        r = xpost("dm-list", "-n", "5")
+        if not r.ok:
+            _tier_guard(r, "dm-list")
+
+    def test_dm_send(self, xpost, target_username):
+        """Send a DM to the target user. May fail on lower tiers."""
+        tag = uuid.uuid4().hex[:8]
+        r = xpost("dm", target_username, f"xpost integration test {tag}")
+        if not r.ok:
+            _tier_guard(r, "dm")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -417,13 +548,117 @@ class TestBookmarks:
         finally:
             xpost("delete", tweet_id)
 
+    def test_bookmark_folders(self, xpost):
+        """List bookmark folders (may not be supported on all tiers)."""
+        r = xpost("bookmark-folders")
+        if not r.ok:
+            _tier_guard(r, "bookmark-folders")
+
     def test_auth_skipped(self):
         """The `auth` command requires a browser -- it cannot be tested in CI."""
         pytest.skip("auth command requires interactive browser flow -- skipped in automated tests")
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Group 9: Profile Update
+# Group 9: Lists
+# ═══════════════════════════════════════════════════════════════════
+
+class TestLists:
+    """Test list create/delete/lookup/tweets/members lifecycle."""
+
+    def test_my_lists(self, xpost):
+        r = xpost("my-lists")
+        if not r.ok:
+            _tier_guard(r, "my-lists")
+
+    def test_list_lifecycle(self, xpost, target_username):
+        """Create a list, add a member, list tweets, remove member, delete list."""
+        tag = uuid.uuid4().hex[:8]
+        r = xpost("list-create", f"xpost-test-{tag}", "--description", "Integration test list")
+        if not r.ok:
+            _tier_guard(r, "list-create")
+            return
+
+        data = r.json()
+        list_id = (data or {}).get("data", {}).get("id")
+        if not list_id:
+            pytest.skip("Could not extract list ID from response")
+            return
+
+        try:
+            time.sleep(1)
+
+            # Lookup
+            r = xpost("list", list_id)
+            if not r.ok:
+                _tier_guard(r, "list lookup")
+
+            # Add member
+            r = xpost("list-add-member", list_id, target_username)
+            if not r.ok:
+                _tier_guard(r, "list-add-member")
+            else:
+                time.sleep(1)
+
+                # List members
+                r = xpost("list-members", list_id)
+                if not r.ok:
+                    _tier_guard(r, "list-members")
+
+                # List tweets (may be empty for a new list)
+                r = xpost("list-tweets", list_id, "-n", "5")
+                if not r.ok:
+                    _tier_guard(r, "list-tweets")
+
+                # Remove member
+                r = xpost("list-remove-member", list_id, target_username)
+                if not r.ok:
+                    _tier_guard(r, "list-remove-member")
+        finally:
+            xpost("list-delete", list_id)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Group 10: Trends and Spaces (Bearer Token)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestTrendsSpaces:
+    """Test trends and spaces endpoints."""
+
+    def test_trends(self, xpost):
+        r = xpost("trends", "--woeid", "1")
+        if not r.ok:
+            _tier_guard(r, "trends")
+
+    def test_spaces_search(self, xpost):
+        r = xpost("spaces", "music")
+        if not r.ok:
+            _tier_guard(r, "spaces search")
+
+    def test_space_lookup(self, xpost):
+        """Search for a space first, then look it up."""
+        r = xpost("spaces", "music")
+        if not r.ok:
+            _tier_guard(r, "spaces (for lookup)")
+            return
+        # Try to find a space ID from the results
+        data = r.json_all()
+        space_id = None
+        for item in data:
+            space_id = item.get("id")
+            if space_id:
+                break
+        if not space_id:
+            pytest.skip("No spaces found to look up")
+            return
+
+        r = xpost("space", space_id)
+        if not r.ok:
+            _tier_guard(r, "space lookup")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Group 11: Profile Update
 # ═══════════════════════════════════════════════════════════════════
 
 class TestProfile:
