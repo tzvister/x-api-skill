@@ -48,6 +48,16 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
+
+# Load .env from the skill directory (parent of scripts/)
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent.parent / ".env"
+    if _env_file.exists():
+        load_dotenv(_env_file, override=False)
+except ImportError:
+    pass
 
 API_BASE = "https://api.x.com/2"
 TOKEN_FILE = os.path.expanduser("~/.xpost/tokens.json")

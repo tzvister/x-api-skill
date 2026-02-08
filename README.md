@@ -2,7 +2,7 @@
 
 X/Twitter CLI for AI agents. Post, read, search, and engage on X using the official v2 API with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE.
 
-Built as an [OpenClaw](https://openclaw.ai) / [AgentSkills](https://agentskills.io) skill — install it and your agent learns X/Twitter automatically.
+Built as an [AgentSkills](https://agentskills.io) skill — works with [OpenClaw](https://openclaw.ai), [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview), [Codex](https://openai.com/index/introducing-codex/), [Copilot](https://github.com/features/copilot), or any skills-compatible agent.
 
 ## Why xpost?
 
@@ -20,24 +20,38 @@ Replaces [`bird`](https://github.com/steipete/bird) for agents that need reliabl
 ## Quick Install
 
 ```bash
-curl -fsSL https://syn-ack.ai/skills/xpost/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/syn-ack-ai/xpost/master/install.sh)
 ```
 
-This installs to `~/.openclaw/skills/xpost/` and ensures Python dependencies are available.
+The installer asks which platform you use (OpenClaw, Claude Code, Codex, Copilot, or a custom path), downloads the skill files, installs Python dependencies, and walks you through API key setup.
+
+### Non-interactive install (for agents / CI)
+
+```bash
+export X_CONSUMER_KEY="..." X_CONSUMER_SECRET="..." X_ACCESS_TOKEN="..." X_ACCESS_TOKEN_SECRET="..."
+XPOST_SKILL_DIR=~/.claude/skills/xpost bash install.sh --non-interactive
+```
+
+Skips all prompts. Reads API keys from environment variables and writes them to `.env`.
 
 ## Manual Install
 
 ```bash
-mkdir -p ~/.openclaw/skills/xpost/scripts
-curl -fsSL https://syn-ack.ai/skills/xpost/SKILL.md -o ~/.openclaw/skills/xpost/SKILL.md
-curl -fsSL https://syn-ack.ai/skills/xpost/scripts/xpost.py -o ~/.openclaw/skills/xpost/scripts/xpost.py
-pip install requests requests-oauthlib
+# Replace <skill-dir> with your platform's skills path, e.g.:
+#   OpenClaw:    ~/.openclaw/skills/xpost
+#   Claude Code: ~/.claude/skills/xpost
+#   Codex:       ~/.codex/skills/xpost
+#   Copilot:     ~/.copilot/skills/xpost
+mkdir -p <skill-dir>/scripts
+curl -fsSL https://raw.githubusercontent.com/syn-ack-ai/xpost/master/SKILL.md -o <skill-dir>/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/syn-ack-ai/xpost/master/scripts/xpost.py -o <skill-dir>/scripts/xpost.py
+pip install requests requests-oauthlib python-dotenv
 ```
 
 ## Requirements
 
 - Python 3.10+
-- `requests` + `requests-oauthlib`
+- `requests`, `requests-oauthlib`, `python-dotenv`
 - X API credentials ([developer.x.com](https://developer.x.com/en/portal/dashboard))
 
 ## Authentication
@@ -90,7 +104,8 @@ Required for: `bookmarks`, `bookmark`, `unbookmark`, `bookmark-folders`, `bookma
 ## Commands
 
 ```bash
-xpost=~/.openclaw/skills/xpost/scripts/xpost.py
+# Use your platform's install path (shown at the end of install.sh)
+xpost=<skill-dir>/scripts/xpost.py
 
 # Post & reply
 python3 $xpost tweet "Hello world"
@@ -198,7 +213,7 @@ All commands return JSON. Tweet objects include `id`, `text`, and `edit_history_
 - **280 character limit** on tweets — the script enforces this
 - Profile update uses the v1.1 API (only endpoint not yet on v2)
 - Access tokens inherit permission scope at generation time — regenerate after changing app permissions
-- Streams and full-archive search require may require **Pro access** — will return 403 on lower tiers
+- Streams and full-archive search require **Pro access** — will return 403 on lower tiers
 - Bookmarks require a one-time `auth` setup (OAuth 2.0 PKCE flow)
 - Bearer Token must be set explicitly via `X_BEARER_TOKEN` — get it from https://developer.x.com/en/portal/dashboard
 
