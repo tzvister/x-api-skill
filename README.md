@@ -63,7 +63,7 @@ Covers: tweet, reply, delete, like, unlike, retweet, follow/unfollow, mute, bloc
 export X_BEARER_TOKEN="..."
 ```
 
-If not set, xpost auto-generates a Bearer Token from your consumer key/secret. Required for:
+Required for:
 - Filtered stream (`stream-filter`)
 - Volume stream (`stream-sample`)
 - Full-archive search (`search-all`)
@@ -198,9 +198,9 @@ All commands return JSON. Tweet objects include `id`, `text`, and `edit_history_
 - **280 character limit** on tweets — the script enforces this
 - Profile update uses the v1.1 API (only endpoint not yet on v2)
 - Access tokens inherit permission scope at generation time — regenerate after changing app permissions
-- Streams and full-archive search require **Pro access** ($5,000/month) — will return 403 on lower tiers
+- Streams and full-archive search require may require **Pro access** — will return 403 on lower tiers
 - Bookmarks require a one-time `auth` setup (OAuth 2.0 PKCE flow)
-- Bearer Token is auto-generated from consumer key/secret if `X_BEARER_TOKEN` is not set
+- Bearer Token must be set explicitly via `X_BEARER_TOKEN` — get it from https://developer.x.com/en/portal/dashboard
 
 ## License
 

@@ -108,13 +108,10 @@ def get_client():
 
 
 def _get_bearer_token():
-    """Get Bearer Token for app-only endpoints (streams, full-archive search).
+    """Get Bearer Token for app-only endpoints (streams, trends, spaces, full-archive search).
 
-    Checks X_BEARER_TOKEN env var first, then config file, then auto-generates
-    from consumer key/secret via OAuth2 client credentials grant.
+    Checks X_BEARER_TOKEN env var first, then the OpenClaw config file.
     """
-    import requests
-
     # 1. Check env var
     token = os.environ.get("X_BEARER_TOKEN", "")
 
@@ -127,34 +124,8 @@ def _get_bearer_token():
         except FileNotFoundError:
             pass
 
-    # 3. Auto-generate from consumer key/secret
     if not token:
-        ck = os.environ.get("X_CONSUMER_KEY", "")
-        cs = os.environ.get("X_CONSUMER_SECRET", "")
-        if not ck or not cs:
-            try:
-                with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
-                    cfg = json.load(f)
-                ev = cfg.get("env", {}).get("vars", {})
-                ck = ck or ev.get("X_CONSUMER_KEY", "")
-                cs = cs or ev.get("X_CONSUMER_SECRET", "")
-            except FileNotFoundError:
-                pass
-
-        if ck and cs:
-            resp = requests.post(
-                "https://api.x.com/oauth2/token",
-                auth=(ck, cs),
-                data={"grant_type": "client_credentials"},
-            )
-            if resp.ok:
-                token = resp.json().get("access_token", "")
-            else:
-                print(f"Error generating Bearer Token: {resp.status_code} {resp.text}", file=sys.stderr)
-                sys.exit(1)
-
-    if not token:
-        print("Error: Missing Bearer Token. Set X_BEARER_TOKEN or provide X_CONSUMER_KEY + X_CONSUMER_SECRET.", file=sys.stderr)
+        print("Error: Missing X_BEARER_TOKEN. Get it from https://developer.x.com/en/portal/dashboard", file=sys.stderr)
         sys.exit(1)
 
     return token

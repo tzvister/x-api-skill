@@ -29,7 +29,7 @@ bash <skill-dir>/install.sh
 
 | Variable | Purpose |
 |----------|---------|
-| `X_BEARER_TOKEN` | Bearer token for streams, trends, spaces (auto-generated from consumer keys if not set) |
+| `X_BEARER_TOKEN` | Bearer token for streams, trends, spaces — get from https://developer.x.com/en/portal/dashboard |
 | `X_CLIENT_ID` | OAuth 2.0 client ID for bookmarks — run `auth` first |
 | `X_CLIENT_SECRET` | OAuth 2.0 client secret (only for confidential clients) |
 
@@ -743,4 +743,4 @@ Parse stdout as one or more JSON objects. Use a streaming JSON parser or split o
 - **Access tokens** inherit permission scope at generation time — if you change app permissions in the X Developer Portal, regenerate your access tokens
 - **Streams and full-archive search** require Pro access ($5,000/month) — will return 403 on Free/Basic tiers
 - **Bookmarks** require a one-time interactive `auth` setup (OAuth 2.0 PKCE flow, opens browser)
-- **Bearer Token** is auto-generated from consumer key/secret if `X_BEARER_TOKEN` is not set
+- **Bearer Token** must be set explicitly via `X_BEARER_TOKEN` — get it from https://developer.x.com/en/portal/dashboard
