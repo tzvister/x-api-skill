@@ -55,7 +55,7 @@ try:
     from dotenv import load_dotenv
     _env_file = Path(__file__).resolve().parent.parent / ".env"
     if _env_file.exists():
-        load_dotenv(_env_file, override=False)
+        load_dotenv(_env_file, override=True)
 except ImportError:
     pass
 
@@ -504,64 +504,75 @@ def cmd_quotes(args):
 
 
 def cmd_search(args):
-    client = get_client()
+    """Search recent tweets (last 7 days)."""
+    import requests
+    auth = get_oauth1()
     n = max(args.n, 10)  # API minimum is 10
-    try:
-        results = client.posts.search_recent(query=args.query, max_results=n)
-        for page in results:
-            data = getattr(page, 'data', None) or []
-            if not data:
-                # Try dict-style access as fallback
-                if hasattr(page, '__iter__'):
-                    for tweet in page:
-                        print(json.dumps(tweet, indent=2, default=str))
-                break
-            for tweet in data:
-                print(json.dumps(tweet, indent=2, default=str))
-            break  # First page only
-    except Exception:
-        # Fallback to raw request for search
-        import requests
-        auth = get_oauth1()
-        params = {
-            "query": args.query,
-            "max_results": n,
-            "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
-            "expansions": "author_id",
-            "user.fields": "username,name",
-        }
-        resp = requests.get(f"{API_BASE}/tweets/search/recent", params=params, auth=auth)
-        if not resp.ok:
-            print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-            sys.exit(1)
-        data = resp.json()
-        _merge_authors(data)
-        for tweet in (data.get("data") or []):
-            print(json.dumps(tweet, indent=2, default=str))
-        if not data.get("data"):
-            print("No results found.", file=sys.stderr)
+    params = {
+        "query": args.query,
+        "max_results": min(n, 100),
+        "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(f"{API_BASE}/tweets/search/recent", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    _merge_authors(data)
+    for tweet in (data.get("data") or []):
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print("No results found.", file=sys.stderr)
 
 
 def cmd_mentions(args):
-    client = get_client()
-    user_id = _get_my_id(client)
+    """Get your recent mentions."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
     n = max(args.n, 5)
-    results = client.users.get_mentions(id=user_id, max_results=n)
-    for page in results:
-        for tweet in (page.data or []):
-            print(json.dumps(tweet, indent=2, default=str))
-        break
+    params = {
+        "max_results": min(n, 100),
+        "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(f"{API_BASE}/users/{user_id}/mentions", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    _merge_authors(data)
+    for tweet in (data.get("data") or []):
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print("No mentions found.", file=sys.stderr)
 
 
 def cmd_timeline(args):
-    client = get_client()
-    user_id = _get_my_id(client)
+    """Get your home timeline."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
     n = max(args.n, 5)
-    results = client.users.get_timeline(id=user_id, max_results=n)
-    for page in results:
-        for tweet in (page.data or []):
-            print(json.dumps(tweet, indent=2, default=str))
-        break
+    params = {
+        "max_results": min(n, 100),
+        "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(f"{API_BASE}/users/{user_id}/timelines/reverse_chronological", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    _merge_authors(data)
+    for tweet in (data.get("data") or []):
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print("No timeline tweets found.", file=sys.stderr)
 
 
 # ── Commands: Research ──
@@ -970,15 +981,29 @@ def cmd_dm_conversation(args):
 
 
 def cmd_verify(args):
-    client = get_client()
-    me = client.users.get_me()
-    print(f"Authenticated as: {me}")
+    """Verify OAuth 1.0a credentials work."""
+    import requests
+    auth = get_oauth1()
+    resp = requests.get(f"{API_BASE}/users/me", auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json().get("data", {})
+    print(f"Authenticated as: @{data.get('username')} ({data.get('name')})")
 
 
 def cmd_me(args):
-    client = get_client()
-    me = client.users.get_me()
-    print(json.dumps(me, indent=2, default=str))
+    """Get your own profile info."""
+    import requests
+    auth = get_oauth1()
+    params = {
+        "user.fields": "id,username,name,description,location,url,created_at,public_metrics,verified",
+    }
+    resp = requests.get(f"{API_BASE}/users/me", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json().get("data", {}), indent=2, default=str))
 
 
 def cmd_profile(args):

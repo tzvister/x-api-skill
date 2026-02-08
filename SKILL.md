@@ -357,6 +357,8 @@ python3 scripts/xpost.py unblock spammer123
 
 ### 7. Direct Messages
 
+> **Note:** DM commands require the app permission level **"Read and write and Direct message"** (not just "Read and Write"). If you get a 403 `oauth1-permissions` error, the user needs to update their app permissions in the X Developer Portal under "User authentication settings", then **regenerate their Access Token and Secret** (permissions are baked into tokens at generation time).
+
 #### `dm` — Send a direct message
 
 ```bash

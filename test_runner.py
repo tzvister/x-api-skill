@@ -200,6 +200,13 @@ def build_tests():
 
     tests.append(("My timeline", "Fetch your home timeline (tweets from people you follow)", run_timeline))
 
+    def run_latest_feed():
+        print(f"\n  {DIM}Fetching latest 10 tweets from your feed...{RESET}")
+        ok, out, err = xpost("timeline", "-n", "10")
+        show_result("xpost timeline -n 10", ok, out, err)
+
+    tests.append(("Latest 10 on my feed", "Show the 10 most recent tweets on your home feed", run_latest_feed))
+
     # ── 3. Social Graph ──
 
     def run_followers():
