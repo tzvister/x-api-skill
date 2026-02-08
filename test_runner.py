@@ -7,7 +7,7 @@ Each demo asks you for input with a sensible default — press Enter to
 accept the default or type your own value.
 
 Usage:
-    python3 tests/run_tests_tui.py
+    python3 test_runner.py
 """
 
 import json
@@ -20,7 +20,7 @@ from pathlib import Path
 
 # ── Paths ──
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent
 SCRIPT = ROOT_DIR / "scripts" / "xpost.py"
 
 # Load .env
