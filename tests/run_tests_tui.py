@@ -111,6 +111,19 @@ def ask(prompt, default=""):
         return default
 
 
+def confirm_write(action="This will write to X"):
+    """Ask user to confirm a write operation. Returns True if confirmed, False to skip."""
+    try:
+        val = input(f"  {YELLOW}{action}. Proceed? (y/n){RESET} [{BOLD}y{RESET}]: ").strip().lower()
+        if val in ("n", "no", "skip"):
+            print(f"  {DIM}Skipped write operations.{RESET}\n")
+            return False
+        return True
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
 def pause():
     try:
         input(f"  {DIM}Press Enter to continue...{RESET}")
@@ -214,6 +227,9 @@ def build_tests():
     def run_tweet_lifecycle():
         text = ask("Tweet text", f"Hello from xpost! Testing the full tweet lifecycle [{uuid.uuid4().hex[:6]}]")
 
+        if not confirm_write("This will post a tweet, reply, then delete both"):
+            return
+
         print(f"\n  {DIM}1. Posting tweet...{RESET}")
         ok, out, err = xpost("tweet", text)
         show_result(f'xpost tweet "{text}"', ok, out, err)
@@ -258,6 +274,8 @@ def build_tests():
     tests.append(("Tweet lifecycle", "Post, fetch, reply, read thread, then delete — full round-trip", run_tweet_lifecycle))
 
     def run_tweet_too_long():
+        if not confirm_write("This will attempt to post 281 chars (rejected client-side, never actually posts)"):
+            return
         print(f"\n  {DIM}Attempting to post 281 characters (limit is 280)...{RESET}")
         ok, out, err = xpost("tweet", "x" * 281)
         show_result('xpost tweet "xxx...x" (281 chars)', ok, out, err)
@@ -270,6 +288,8 @@ def build_tests():
 
     def run_like_unlike():
         text = ask("Tweet text to like/unlike", f"Testing the like button [{uuid.uuid4().hex[:6]}]")
+        if not confirm_write("This will post a tweet, like it, unlike it, then delete"):
+            return
         print(f"\n  {DIM}Posting a tweet to engage with...{RESET}")
         ok, out, err = xpost("tweet", text)
         if not ok:
@@ -294,6 +314,8 @@ def build_tests():
     tests.append(("Like / Unlike", "Post a tweet, like it, then unlike it", run_like_unlike))
 
     def run_liking_users():
+        if not confirm_write("This will post a tweet, like it, check liking-users, then delete"):
+            return
         text = f"Who likes this? [{uuid.uuid4().hex[:6]}]"
         print(f"\n  {DIM}Posting a tweet and liking it...{RESET}")
         ok, out, err = xpost("tweet", text)
@@ -317,6 +339,8 @@ def build_tests():
 
     def run_retweet_unretweet():
         text = ask("Tweet text to retweet", f"Retweet round-trip test [{uuid.uuid4().hex[:6]}]")
+        if not confirm_write("This will post a tweet, retweet it, unretweet, then delete"):
+            return
         print(f"\n  {DIM}Posting a tweet to retweet...{RESET}")
         ok, out, err = xpost("tweet", text)
         if not ok:
@@ -342,6 +366,8 @@ def build_tests():
     tests.append(("Retweet / Unretweet", "Post a tweet, retweet it, then undo the retweet", run_retweet_unretweet))
 
     def run_retweeters():
+        if not confirm_write("This will post a tweet, retweet it, check retweeters, then delete"):
+            return
         text = f"Who retweeted this? [{uuid.uuid4().hex[:6]}]"
         print(f"\n  {DIM}Posting a tweet and retweeting it...{RESET}")
         ok, out, err = xpost("tweet", text)
@@ -367,6 +393,8 @@ def build_tests():
 
     def run_follow_unfollow():
         username = ask("Username to follow/unfollow", target or "NASA")
+        if not confirm_write(f"This will follow @{username} then immediately unfollow"):
+            return
         print(f"\n  {DIM}Following @{username}...{RESET}")
         ok, out, err = xpost("follow", username)
         show_result(f"xpost follow {username}", ok, out, err)
@@ -383,6 +411,8 @@ def build_tests():
     def run_hide_unhide():
         parent_text = ask("Parent tweet text", f"Testing reply hiding [{uuid.uuid4().hex[:6]}]")
         reply_text = ask("Reply to hide", "This reply will be hidden and then unhidden!")
+        if not confirm_write("This will post a tweet + reply, hide/unhide the reply, then delete both"):
+            return
         print(f"\n  {DIM}Posting parent tweet...{RESET}")
         ok, out, err = xpost("tweet", parent_text)
         if not ok:
@@ -422,6 +452,8 @@ def build_tests():
 
     def run_mute_unmute():
         username = ask("Username to mute/unmute", target or "xDevelopers")
+        if not confirm_write(f"This will mute @{username} then immediately unmute"):
+            return
         print(f"\n  {DIM}Muting @{username}...{RESET}")
         ok, out, err = xpost("mute", username)
         show_result(f"xpost mute {username}", ok, out, err)
@@ -435,6 +467,8 @@ def build_tests():
 
     def run_block_unblock():
         username = ask("Username to block/unblock", target or "xDevelopers")
+        if not confirm_write(f"This will block @{username} then immediately unblock"):
+            return
         print(f"\n  {DIM}Blocking @{username}...{RESET}")
         ok, out, err = xpost("block", username)
         show_result(f"xpost block {username}", ok, out, err)
@@ -461,6 +495,8 @@ def build_tests():
             print(f"  {YELLOW}No username provided, skipping.{RESET}")
             return
         message = ask("Message text", f"Hey! This is a test DM from xpost [{uuid.uuid4().hex[:6]}]")
+        if not confirm_write(f"This will send a DM to @{username}"):
+            return
         ok, out, err = xpost("dm", username, message)
         show_result(f'xpost dm {username} "{message}"', ok, out, err)
 
@@ -469,12 +505,15 @@ def build_tests():
     # ── 10. Bearer Token / Streams ──
 
     def run_stream_rules():
-        rule = ask("Stream filter rule", "breaking news OR #trending")
-        tag = ask("Rule label/tag", "demo")
         print(f"\n  {DIM}Listing current rules...{RESET}")
         ok, out, err = xpost("stream-rules-list")
         show_result("xpost stream-rules-list", ok, out, err)
         if not ok:
+            return
+
+        rule = ask("Stream filter rule to add", "breaking news OR #trending")
+        tag = ask("Rule label/tag", "demo")
+        if not confirm_write("This will add a stream rule then immediately delete it"):
             return
 
         print(f"  {DIM}Adding rule: \"{rule}\"...{RESET}")
@@ -531,6 +570,8 @@ def build_tests():
 
     def run_bookmark_add():
         text = ask("Tweet text to bookmark", f"Bookmarking this for later [{uuid.uuid4().hex[:6]}]")
+        if not confirm_write("This will post a tweet, bookmark it, verify, then clean up"):
+            return
         print(f"\n  {DIM}Posting a tweet...{RESET}")
         ok, out, err = xpost("tweet", text)
         if not ok:
@@ -587,6 +628,9 @@ def build_tests():
         list_name = ask("New list name", f"xpost-demo-{uuid.uuid4().hex[:6]}")
         list_desc = ask("List description", "A demo list created by xpost")
         member = ask("Username to add as member", target or "NASA")
+
+        if not confirm_write("This will create a list, add/remove a member, then delete the list"):
+            return
 
         print(f"\n  {DIM}1. Creating list \"{list_name}\"...{RESET}")
         ok, out, err = xpost("list-create", list_name, "--description", list_desc)
@@ -653,6 +697,8 @@ def build_tests():
 
     def run_profile():
         bio = ask("New bio text", f"Building cool things with xpost | {uuid.uuid4().hex[:6]}")
+        if not confirm_write("This will change your X bio"):
+            return
         ok, out, err = xpost("profile", bio)
         show_result(f'xpost profile "{bio}"', ok, out, err)
 
