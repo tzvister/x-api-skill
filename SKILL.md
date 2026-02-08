@@ -12,28 +12,68 @@ X/Twitter CLI with complete API v2 coverage. Every command outputs structured JS
 
 ## Setup
 
-```bash
-bash <skill-dir>/install.sh
+Before using any command, the `.env` file at `<skill-dir>/.env` must contain valid API credentials. If a key is missing, guide the user through these steps one at a time.
+
+All keys come from the X Developer Portal: https://developer.x.com/en/portal/dashboard
+
+### Step 1: OAuth 1.0a credentials (required)
+
+These 4 keys are needed for all core commands. Ask the user for each one individually.
+
+Tell the user:
+1. Go to https://developer.x.com/en/portal/dashboard
+2. Select your app (or create one under "Projects & Apps")
+3. Click the **"Keys and tokens"** tab
+4. Under **"Consumer Keys"** — copy the **API Key** and **API Secret**
+5. Under **"Authentication Tokens"** — click **"Generate"** to get **Access Token** and **Access Token Secret**
+6. **Important:** App permissions must be set to **"Read and Write"** BEFORE generating tokens. If permissions were changed after, tokens must be regenerated.
+
+Then ask the user to provide each value, and write them to `<skill-dir>/.env`:
+
+```
+X_CONSUMER_KEY="<value from user>"
+X_CONSUMER_SECRET="<value from user>"
+X_ACCESS_TOKEN="<value from user>"
+X_ACCESS_TOKEN_SECRET="<value from user>"
 ```
 
-### Required Environment Variables
+After writing, verify with: `python3 <skill-dir>/scripts/xpost.py verify`
 
-| Variable | Purpose |
-|----------|---------|
-| `X_CONSUMER_KEY` | OAuth 1.0a consumer key |
-| `X_CONSUMER_SECRET` | OAuth 1.0a consumer secret |
-| `X_ACCESS_TOKEN` | OAuth 1.0a access token |
-| `X_ACCESS_TOKEN_SECRET` | OAuth 1.0a access token secret |
+### Step 2: Bearer Token (optional — unlocks trends, spaces, streams)
 
-### Optional Environment Variables
+Only needed for: `trends`, `spaces`, `space`, `stream-filter`, `stream-sample`, `search-all`
 
-| Variable | Purpose |
-|----------|---------|
-| `X_BEARER_TOKEN` | Bearer token for streams, trends, spaces — get from https://developer.x.com/en/portal/dashboard |
-| `X_CLIENT_ID` | OAuth 2.0 client ID for bookmarks — run `auth` first |
-| `X_CLIENT_SECRET` | OAuth 2.0 client secret (only for confidential clients) |
+Tell the user:
+1. Same page — **"Keys and tokens"** tab
+2. Under **"Bearer Token"** — click **"Generate"** if not already generated
+3. Copy the token
 
-### Auth Tiers
+Add to `.env`:
+```
+X_BEARER_TOKEN="<value from user>"
+```
+
+### Step 3: OAuth 2.0 PKCE (optional — unlocks bookmarks)
+
+Only needed for: `bookmarks`, `bookmark`, `unbookmark`, `bookmark-folders`, `bookmarks-folder`
+
+Tell the user:
+1. Same page — **"Keys and tokens"** tab
+2. Under **"OAuth 2.0 Client ID and Client Secret"** — copy both values
+3. If not visible, the user needs to enable OAuth 2.0 in their app's **"User authentication settings"**
+
+Add to `.env`:
+```
+X_CLIENT_ID="<value from user>"
+X_CLIENT_SECRET="<value from user>"
+```
+
+Then run the one-time browser auth: `python3 <skill-dir>/scripts/xpost.py auth`
+This opens the user's browser. They must sign in and click "Authorize app". Tokens are saved to `~/.xpost/tokens.json` and auto-refresh.
+
+**Note:** The `auth` command is interactive (opens a browser) — it cannot be run headlessly.
+
+### Auth Tiers Summary
 
 | Auth Method | Commands it unlocks |
 |-------------|-------------------|
