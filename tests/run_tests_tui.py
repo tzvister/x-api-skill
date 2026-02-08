@@ -89,6 +89,10 @@ def show_result(label, ok, stdout, stderr):
         if stdout:
             for line in pretty_json(stdout).splitlines():
                 print(f"    {line}")
+        elif stderr:
+            # Show informational stderr (e.g. "No liked tweets found") when stdout is empty
+            for line in stderr.splitlines()[:5]:
+                print(f"    {DIM}{line}{RESET}")
     else:
         print(f"\n  {RED}ERROR{RESET} {BOLD}{label}{RESET}")
         if stderr:
@@ -215,12 +219,20 @@ def build_tests():
     tests.append(("Following", "List accounts that a user follows", run_following))
 
     def run_liked():
-        username = ask("Whose liked tweets", "ycombinator")
+        username = ask("Whose liked tweets (most accounts have private likes — use your own)", "me")
+        if username == "me":
+            # Resolve to the authenticated user
+            ok, out, err = xpost("me")
+            if ok:
+                try:
+                    username = json.loads(out).get("username", "me")
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
         count = ask("How many", "5")
         ok, out, err = xpost("liked", username, "-n", count)
         show_result(f"xpost liked {username} -n {count}", ok, out, err)
 
-    tests.append(("Liked tweets", "See which tweets a user has liked", run_liked))
+    tests.append(("Liked tweets", "See tweets you (or another user) have liked — most accounts have private likes", run_liked))
 
     # ── 4. Tweet Lifecycle ──
 

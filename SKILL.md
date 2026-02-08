@@ -208,13 +208,14 @@ python3 scripts/xpost.py following openai -n 100
 #### `liked` — List tweets liked by a user
 
 ```bash
-python3 scripts/xpost.py liked ycombinator -n 20
+python3 scripts/xpost.py liked myusername -n 20
 ```
 
 - **username** (required): Username with or without `@`.
 - **-n** (optional, default 20): Max results (5-100).
 - **Returns:** Tweet objects that the user has liked, with author info.
-- **Use when:** Understanding what content a user finds interesting.
+- **Note:** Most accounts have private likes. This reliably works on the authenticated user's own account. Other accounts will return empty results unless they have public likes enabled.
+- **Use when:** Reviewing your own liked tweets or checking a user who has public likes.
 
 #### `liking-users` — List users who liked a specific tweet
 
