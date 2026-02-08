@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-X/Twitter CLI using raw X API v2 with OAuth 1.0a.
+X/Twitter CLI using raw X API v2 with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE.
 
-XDK v0.5.0 has broken Pydantic models (empty model_fields, model_dump returns {}).
-This script uses XDK only for OAuth1 setup + read endpoints, and raw requests
-for write operations (tweet, reply, delete).
+Supports three authentication methods:
+  - OAuth 1.0a: User context for tweets, likes, follows, mutes, blocks
+  - Bearer Token: App-only for streams and full-archive search (Pro access)
+  - OAuth 2.0 PKCE: User context for bookmarks
 
 Usage:
   python3 scripts/xpost.py tweet "Hello world"
@@ -14,19 +15,33 @@ Usage:
   python3 scripts/xpost.py like <tweet-id>
   python3 scripts/xpost.py unlike <tweet-id>
   python3 scripts/xpost.py follow <username>
+  python3 scripts/xpost.py mute <username>
+  python3 scripts/xpost.py unmute <username>
+  python3 scripts/xpost.py block <username>
+  python3 scripts/xpost.py unblock <username>
   python3 scripts/xpost.py search "query" [-n 10]
+  python3 scripts/xpost.py search-all "query" [-n 10]       (Pro access)
   python3 scripts/xpost.py mentions [-n 10]
   python3 scripts/xpost.py timeline [-n 10]
   python3 scripts/xpost.py user <username>
   python3 scripts/xpost.py user-timeline <username> [-n 10] [--include-rts]
   python3 scripts/xpost.py thread-chain <tweet-id> [-n 20]
   python3 scripts/xpost.py quotes <tweet-id> [-n 10]
+  python3 scripts/xpost.py auth                              (OAuth 2.0 PKCE setup)
+  python3 scripts/xpost.py bookmarks [-n 20]
+  python3 scripts/xpost.py bookmark <tweet-id>
+  python3 scripts/xpost.py unbookmark <tweet-id>
+  python3 scripts/xpost.py stream-rules-add "rule" [--tag TAG]
+  python3 scripts/xpost.py stream-rules-list
+  python3 scripts/xpost.py stream-rules-delete <rule-id>
+  python3 scripts/xpost.py stream-filter [-n 10]             (Pro access)
+  python3 scripts/xpost.py stream-sample [-n 10]             (Pro access)
   python3 scripts/xpost.py profile "new bio text"
   python3 scripts/xpost.py delete <tweet-id>
   python3 scripts/xpost.py verify
   python3 scripts/xpost.py me
 
-Requires: pip install xdk requests-oauthlib
+Requires: pip install requests requests-oauthlib
 """
 
 import argparse
@@ -35,6 +50,10 @@ import os
 import sys
 
 API_BASE = "https://api.x.com/2"
+TOKEN_FILE = os.path.expanduser("~/.xpost/tokens.json")
+
+
+# ── Authentication: OAuth 1.0a ──
 
 
 def _get_creds():
@@ -85,6 +104,216 @@ def get_client():
     return Client(auth=auth)
 
 
+# ── Authentication: Bearer Token (app-only) ──
+
+
+def _get_bearer_token():
+    """Get Bearer Token for app-only endpoints (streams, full-archive search).
+
+    Checks X_BEARER_TOKEN env var first, then config file, then auto-generates
+    from consumer key/secret via OAuth2 client credentials grant.
+    """
+    import requests
+
+    # 1. Check env var
+    token = os.environ.get("X_BEARER_TOKEN", "")
+
+    # 2. Check config file
+    if not token:
+        try:
+            with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
+                cfg = json.load(f)
+            token = cfg.get("env", {}).get("vars", {}).get("X_BEARER_TOKEN", "")
+        except FileNotFoundError:
+            pass
+
+    # 3. Auto-generate from consumer key/secret
+    if not token:
+        ck = os.environ.get("X_CONSUMER_KEY", "")
+        cs = os.environ.get("X_CONSUMER_SECRET", "")
+        if not ck or not cs:
+            try:
+                with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
+                    cfg = json.load(f)
+                ev = cfg.get("env", {}).get("vars", {})
+                ck = ck or ev.get("X_CONSUMER_KEY", "")
+                cs = cs or ev.get("X_CONSUMER_SECRET", "")
+            except FileNotFoundError:
+                pass
+
+        if ck and cs:
+            resp = requests.post(
+                "https://api.x.com/oauth2/token",
+                auth=(ck, cs),
+                data={"grant_type": "client_credentials"},
+            )
+            if resp.ok:
+                token = resp.json().get("access_token", "")
+            else:
+                print(f"Error generating Bearer Token: {resp.status_code} {resp.text}", file=sys.stderr)
+                sys.exit(1)
+
+    if not token:
+        print("Error: Missing Bearer Token. Set X_BEARER_TOKEN or provide X_CONSUMER_KEY + X_CONSUMER_SECRET.", file=sys.stderr)
+        sys.exit(1)
+
+    return token
+
+
+def _bearer_headers():
+    """Get Authorization headers for Bearer Token endpoints."""
+    return {"Authorization": f"Bearer {_get_bearer_token()}"}
+
+
+# ── Authentication: OAuth 2.0 PKCE ──
+
+
+def _load_pkce_tokens():
+    """Load stored OAuth 2.0 PKCE tokens from disk."""
+    try:
+        with open(TOKEN_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def _save_pkce_tokens(tokens):
+    """Save OAuth 2.0 PKCE tokens to disk."""
+    os.makedirs(os.path.dirname(TOKEN_FILE), exist_ok=True)
+    with open(TOKEN_FILE, "w") as f:
+        json.dump(tokens, f, indent=2)
+
+
+def _get_client_id():
+    """Get OAuth 2.0 Client ID from env or config."""
+    client_id = os.environ.get("X_CLIENT_ID", "")
+    if not client_id:
+        try:
+            with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
+                cfg = json.load(f)
+            client_id = cfg.get("env", {}).get("vars", {}).get("X_CLIENT_ID", "")
+        except FileNotFoundError:
+            pass
+    if not client_id:
+        print("Error: Missing X_CLIENT_ID. Required for OAuth 2.0 PKCE (bookmarks).", file=sys.stderr)
+        sys.exit(1)
+    return client_id
+
+
+def _get_client_secret():
+    """Get OAuth 2.0 Client Secret from env or config (optional for public clients)."""
+    secret = os.environ.get("X_CLIENT_SECRET", "")
+    if not secret:
+        try:
+            with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
+                cfg = json.load(f)
+            secret = cfg.get("env", {}).get("vars", {}).get("X_CLIENT_SECRET", "")
+        except FileNotFoundError:
+            pass
+    return secret
+
+
+def _refresh_pkce_token(refresh_token):
+    """Refresh an expired OAuth 2.0 PKCE access token."""
+    import requests
+    import time
+
+    client_id = _get_client_id()
+    client_secret = _get_client_secret()
+
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+
+    auth = None
+    if client_secret:
+        auth = (client_id, client_secret)
+
+    resp = requests.post("https://api.x.com/2/oauth2/token", data=data, auth=auth)
+    if not resp.ok:
+        print(f"Error refreshing token: {resp.status_code} {resp.text}", file=sys.stderr)
+        print("Run 'xpost auth' to re-authorize.", file=sys.stderr)
+        sys.exit(1)
+
+    result = resp.json()
+    tokens = {
+        "access_token": result["access_token"],
+        "refresh_token": result.get("refresh_token", refresh_token),
+        "expires_at": int(time.time()) + result.get("expires_in", 7200),
+    }
+    _save_pkce_tokens(tokens)
+    return tokens["access_token"]
+
+
+def _get_oauth2_pkce_token():
+    """Get a valid OAuth 2.0 PKCE access token, refreshing if expired."""
+    import time
+
+    tokens = _load_pkce_tokens()
+    if not tokens:
+        print("Error: No OAuth 2.0 tokens found. Run 'xpost auth' first.", file=sys.stderr)
+        sys.exit(1)
+
+    # Check expiry (refresh 60s before actual expiry)
+    if time.time() >= tokens.get("expires_at", 0) - 60:
+        refresh = tokens.get("refresh_token")
+        if not refresh:
+            print("Error: No refresh token. Run 'xpost auth' to re-authorize.", file=sys.stderr)
+            sys.exit(1)
+        return _refresh_pkce_token(refresh)
+
+    return tokens["access_token"]
+
+
+def _oauth2_headers():
+    """Get Authorization headers for OAuth 2.0 PKCE endpoints."""
+    return {"Authorization": f"Bearer {_get_oauth2_pkce_token()}"}
+
+
+# ── Common Helpers ──
+
+
+def _get_my_user_id():
+    """Get the authenticated user's ID via OAuth 1.0a. Cached per process."""
+    if not hasattr(_get_my_user_id, "_cached"):
+        import requests
+        auth = get_oauth1()
+        resp = requests.get(f"{API_BASE}/users/me", auth=auth)
+        if not resp.ok:
+            print(f"Error getting user: {resp.status_code} {resp.text}", file=sys.stderr)
+            sys.exit(1)
+        _get_my_user_id._cached = resp.json()["data"]["id"]
+    return _get_my_user_id._cached
+
+
+def _resolve_username(username):
+    """Resolve a @username to a user ID."""
+    import requests
+    auth = get_oauth1()
+    target = username.lstrip("@")
+    resp = requests.get(f"{API_BASE}/users/by/username/{target}", auth=auth)
+    if not resp.ok:
+        print(f"Error resolving @{target}: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    return resp.json()["data"]["id"]
+
+
+def _get_my_id(client):
+    """Get user ID from XDK client (legacy helper for XDK-based commands)."""
+    me = client.users.get_me()
+    if hasattr(me, 'data') and isinstance(me.data, dict):
+        return me.data['id']
+    me_str = str(me)
+    import re
+    match = re.search(r"id='?(\d+)", me_str)
+    if not match:
+        print("Could not get user ID", file=sys.stderr)
+        sys.exit(1)
+    return match.group(1)
+
+
 def _post_tweet(payload: dict) -> dict:
     """Post a tweet using raw requests + OAuth1 (bypasses broken XDK models)."""
     import requests
@@ -107,7 +336,18 @@ def _delete_tweet(tweet_id: str) -> dict:
     return resp.json()
 
 
-# ── Commands ──
+def _merge_authors(data):
+    """Merge author info from includes into tweet objects for convenience."""
+    users = {}
+    if "includes" in data and "users" in data["includes"]:
+        users = {u["id"]: u for u in data["includes"]["users"]}
+    for tweet in (data.get("data") or []):
+        author = users.get(tweet.get("author_id", ""), {})
+        tweet["author"] = {"username": author.get("username"), "name": author.get("name")}
+    return users
+
+
+# ── Commands: Post & Reply ──
 
 
 def cmd_tweet(args):
@@ -133,142 +373,12 @@ def cmd_reply(args):
     print(json.dumps(result, indent=2, default=str))
 
 
-def cmd_verify(args):
-    client = get_client()
-    me = client.users.get_me()
-    print(f"Authenticated as: {me}")
+def cmd_delete(args):
+    result = _delete_tweet(args.tweet_id)
+    print(json.dumps(result, indent=2, default=str))
 
 
-def cmd_me(args):
-    client = get_client()
-    me = client.users.get_me()
-    print(json.dumps(me, indent=2, default=str))
-
-
-def cmd_search(args):
-    client = get_client()
-    n = max(args.n, 10)  # API minimum is 10
-    try:
-        results = client.posts.search_recent(query=args.query, max_results=n)
-        for page in results:
-            data = getattr(page, 'data', None) or []
-            if not data:
-                # Try dict-style access as fallback
-                if hasattr(page, '__iter__'):
-                    for tweet in page:
-                        print(json.dumps(tweet, indent=2, default=str))
-                break
-            for tweet in data:
-                print(json.dumps(tweet, indent=2, default=str))
-            break  # First page only
-    except Exception as e:
-        # Fallback to raw request for search
-        import requests
-        auth = get_oauth1()
-        params = {
-            "query": args.query,
-            "max_results": n,
-            "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
-            "expansions": "author_id",
-            "user.fields": "username,name",
-        }
-        resp = requests.get(f"{API_BASE}/tweets/search/recent", params=params, auth=auth)
-        if not resp.ok:
-            print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-            sys.exit(1)
-        data = resp.json()
-        users = {}
-        if "includes" in data and "users" in data["includes"]:
-            users = {u["id"]: u for u in data["includes"]["users"]}
-        for tweet in (data.get("data") or []):
-            author = users.get(tweet.get("author_id", ""), {})
-            tweet["author"] = {"username": author.get("username"), "name": author.get("name")}
-            print(json.dumps(tweet, indent=2, default=str))
-        if not data.get("data"):
-            print("No results found.", file=sys.stderr)
-
-
-def _get_my_id(client):
-    me = client.users.get_me()
-    if hasattr(me, 'data') and isinstance(me.data, dict):
-        return me.data['id']
-    me_str = str(me)
-    import re
-    match = re.search(r"id='?(\d+)", me_str)
-    if not match:
-        print("Could not get user ID", file=sys.stderr)
-        sys.exit(1)
-    return match.group(1)
-
-
-def cmd_mentions(args):
-    client = get_client()
-    user_id = _get_my_id(client)
-    n = max(args.n, 5)
-    results = client.users.get_mentions(id=user_id, max_results=n)
-    for page in results:
-        for tweet in (page.data or []):
-            print(json.dumps(tweet, indent=2, default=str))
-        break
-
-
-def cmd_timeline(args):
-    client = get_client()
-    user_id = _get_my_id(client)
-    n = max(args.n, 5)
-    results = client.users.get_timeline(id=user_id, max_results=n)
-    for page in results:
-        for tweet in (page.data or []):
-            print(json.dumps(tweet, indent=2, default=str))
-        break
-
-
-def cmd_profile(args):
-    """Update profile bio — uses v1.1 API (XDK doesn't cover this)."""
-    import hashlib
-    import hmac
-    import base64
-    import time
-    import urllib.parse
-    import urllib.request
-
-    ck, cs, at, ats = _get_creds()
-
-    url = "https://api.twitter.com/1.1/account/update_profile.json"
-    params = {"description": args.text}
-
-    oauth = {
-        "oauth_consumer_key": ck,
-        "oauth_nonce": hashlib.md5(str(time.time()).encode()).hexdigest(),
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": str(int(time.time())),
-        "oauth_token": at,
-        "oauth_version": "1.0",
-    }
-    all_params = {**oauth, **params}
-    sorted_params = "&".join(
-        f'{urllib.parse.quote(k, safe="")}'
-        f'={urllib.parse.quote(str(v), safe="")}'
-        for k, v in sorted(all_params.items())
-    )
-    base_string = f'POST&{urllib.parse.quote(url, safe="")}&{urllib.parse.quote(sorted_params, safe="")}'
-    signing_key = f'{urllib.parse.quote(cs, safe="")}&{urllib.parse.quote(ats, safe="")}'
-    sig = base64.b64encode(
-        hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
-    ).decode()
-    oauth["oauth_signature"] = sig
-    auth_header = "OAuth " + ", ".join(
-        f'{k}="{urllib.parse.quote(v, safe="")}"' for k, v in sorted(oauth.items())
-    )
-
-    data = urllib.parse.urlencode(params).encode()
-    req = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Authorization": auth_header, "Content-Type": "application/x-www-form-urlencoded"},
-    )
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read())
-        print(f"Bio updated: {result['description']}")
+# ── Commands: Read ──
 
 
 def cmd_get(args):
@@ -324,163 +434,9 @@ def cmd_thread(args):
         print(f"Error searching thread: {resp.status_code} {resp.text}", file=sys.stderr)
         sys.exit(1)
     data = resp.json()
-    users = {}
-    if "includes" in data and "users" in data["includes"]:
-        users = {u["id"]: u for u in data["includes"]["users"]}
+    _merge_authors(data)
     for tweet in (data.get("data") or []):
-        author = users.get(tweet.get("author_id", ""), {})
-        tweet["author"] = {"username": author.get("username"), "name": author.get("name")}
         print(json.dumps(tweet, indent=2, default=str))
-
-
-def cmd_like(args):
-    """Like a tweet."""
-    import requests
-    auth = get_oauth1()
-    # Need our user ID
-    me_resp = requests.get(f"{API_BASE}/users/me", auth=auth)
-    if not me_resp.ok:
-        print(f"Error getting user: {me_resp.status_code}", file=sys.stderr)
-        sys.exit(1)
-    user_id = me_resp.json()["data"]["id"]
-    resp = requests.post(
-        f"{API_BASE}/users/{user_id}/likes",
-        json={"tweet_id": args.tweet_id},
-        auth=auth,
-    )
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    print(json.dumps(resp.json(), indent=2, default=str))
-
-
-def cmd_unlike(args):
-    """Unlike a tweet."""
-    import requests
-    auth = get_oauth1()
-    me_resp = requests.get(f"{API_BASE}/users/me", auth=auth)
-    if not me_resp.ok:
-        print(f"Error getting user: {me_resp.status_code}", file=sys.stderr)
-        sys.exit(1)
-    user_id = me_resp.json()["data"]["id"]
-    resp = requests.delete(f"{API_BASE}/users/{user_id}/likes/{args.tweet_id}", auth=auth)
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    print(json.dumps(resp.json(), indent=2, default=str))
-
-
-def cmd_follow(args):
-    """Follow a user by username."""
-    import requests
-    auth = get_oauth1()
-    # Get our ID
-    me_resp = requests.get(f"{API_BASE}/users/me", auth=auth)
-    if not me_resp.ok:
-        print(f"Error getting user: {me_resp.status_code}", file=sys.stderr)
-        sys.exit(1)
-    user_id = me_resp.json()["data"]["id"]
-    # Resolve target username to ID
-    target = args.username.lstrip("@")
-    resp = requests.get(f"{API_BASE}/users/by/username/{target}", auth=auth)
-    if not resp.ok:
-        print(f"Error resolving @{target}: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    target_id = resp.json()["data"]["id"]
-    # Follow
-    resp = requests.post(
-        f"{API_BASE}/users/{user_id}/following",
-        json={"target_user_id": target_id},
-        auth=auth,
-    )
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    print(json.dumps(resp.json(), indent=2, default=str))
-
-
-def cmd_retweet(args):
-    """Retweet a tweet."""
-    import requests
-    auth = get_oauth1()
-    me_resp = requests.get(f"{API_BASE}/users/me", auth=auth)
-    if not me_resp.ok:
-        print(f"Error getting user: {me_resp.status_code}", file=sys.stderr)
-        sys.exit(1)
-    user_id = me_resp.json()["data"]["id"]
-    resp = requests.post(
-        f"{API_BASE}/users/{user_id}/retweets",
-        json={"tweet_id": args.tweet_id},
-        auth=auth,
-    )
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    print(json.dumps(resp.json(), indent=2, default=str))
-
-
-def cmd_unretweet(args):
-    """Undo a retweet."""
-    import requests
-    auth = get_oauth1()
-    me_resp = requests.get(f"{API_BASE}/users/me", auth=auth)
-    if not me_resp.ok:
-        print(f"Error getting user: {me_resp.status_code}", file=sys.stderr)
-        sys.exit(1)
-    user_id = me_resp.json()["data"]["id"]
-    resp = requests.delete(f"{API_BASE}/users/{user_id}/retweets/{args.tweet_id}", auth=auth)
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    print(json.dumps(resp.json(), indent=2, default=str))
-
-
-def cmd_user(args):
-    """Look up a user's profile by username."""
-    import requests
-    auth = get_oauth1()
-    target = args.username.lstrip("@")
-    params = {
-        "user.fields": "created_at,description,location,public_metrics,verified,url,pinned_tweet_id",
-    }
-    resp = requests.get(f"{API_BASE}/users/by/username/{target}", params=params, auth=auth)
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    data = resp.json().get("data", resp.json())
-    print(json.dumps(data, indent=2, default=str))
-
-
-def cmd_user_timeline(args):
-    """Fetch recent tweets from a specific user."""
-    import requests
-    auth = get_oauth1()
-    # Resolve username to ID
-    target = args.username.lstrip("@")
-    resp = requests.get(f"{API_BASE}/users/by/username/{target}", auth=auth)
-    if not resp.ok:
-        print(f"Error resolving @{target}: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    user_id = resp.json()["data"]["id"]
-    # Fetch their tweets
-    n = max(args.n, 5)
-    params = {
-        "max_results": n,
-        "tweet.fields": "created_at,author_id,conversation_id,in_reply_to_user_id,text,public_metrics",
-        "exclude": "retweets" if not args.include_rts else "",
-    }
-    if not params["exclude"]:
-        del params["exclude"]
-    resp = requests.get(f"{API_BASE}/users/{user_id}/tweets", params=params, auth=auth)
-    if not resp.ok:
-        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
-        sys.exit(1)
-    data = resp.json()
-    for tweet in (data.get("data") or []):
-        tweet["author"] = {"username": target}
-        print(json.dumps(tweet, indent=2, default=str))
-    if not data.get("data"):
-        print(f"No tweets found for @{target}.", file=sys.stderr)
 
 
 def cmd_thread_chain(args):
@@ -559,26 +515,698 @@ def cmd_quotes(args):
         print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
         sys.exit(1)
     data = resp.json()
-    users = {}
-    if "includes" in data and "users" in data["includes"]:
-        users = {u["id"]: u for u in data["includes"]["users"]}
+    _merge_authors(data)
     for tweet in (data.get("data") or []):
-        author = users.get(tweet.get("author_id", ""), {})
-        tweet["author"] = {"username": author.get("username"), "name": author.get("name")}
         print(json.dumps(tweet, indent=2, default=str))
     if not data.get("data"):
         print("No quote tweets found.", file=sys.stderr)
 
 
-def cmd_delete(args):
-    result = _delete_tweet(args.tweet_id)
-    print(json.dumps(result, indent=2, default=str))
+def cmd_search(args):
+    client = get_client()
+    n = max(args.n, 10)  # API minimum is 10
+    try:
+        results = client.posts.search_recent(query=args.query, max_results=n)
+        for page in results:
+            data = getattr(page, 'data', None) or []
+            if not data:
+                # Try dict-style access as fallback
+                if hasattr(page, '__iter__'):
+                    for tweet in page:
+                        print(json.dumps(tweet, indent=2, default=str))
+                break
+            for tweet in data:
+                print(json.dumps(tweet, indent=2, default=str))
+            break  # First page only
+    except Exception:
+        # Fallback to raw request for search
+        import requests
+        auth = get_oauth1()
+        params = {
+            "query": args.query,
+            "max_results": n,
+            "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
+            "expansions": "author_id",
+            "user.fields": "username,name",
+        }
+        resp = requests.get(f"{API_BASE}/tweets/search/recent", params=params, auth=auth)
+        if not resp.ok:
+            print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+            sys.exit(1)
+        data = resp.json()
+        _merge_authors(data)
+        for tweet in (data.get("data") or []):
+            print(json.dumps(tweet, indent=2, default=str))
+        if not data.get("data"):
+            print("No results found.", file=sys.stderr)
+
+
+def cmd_mentions(args):
+    client = get_client()
+    user_id = _get_my_id(client)
+    n = max(args.n, 5)
+    results = client.users.get_mentions(id=user_id, max_results=n)
+    for page in results:
+        for tweet in (page.data or []):
+            print(json.dumps(tweet, indent=2, default=str))
+        break
+
+
+def cmd_timeline(args):
+    client = get_client()
+    user_id = _get_my_id(client)
+    n = max(args.n, 5)
+    results = client.users.get_timeline(id=user_id, max_results=n)
+    for page in results:
+        for tweet in (page.data or []):
+            print(json.dumps(tweet, indent=2, default=str))
+        break
+
+
+# ── Commands: Research ──
+
+
+def cmd_user(args):
+    """Look up a user's profile by username."""
+    import requests
+    auth = get_oauth1()
+    target = args.username.lstrip("@")
+    params = {
+        "user.fields": "created_at,description,location,public_metrics,verified,url,pinned_tweet_id",
+    }
+    resp = requests.get(f"{API_BASE}/users/by/username/{target}", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json().get("data", resp.json())
+    print(json.dumps(data, indent=2, default=str))
+
+
+def cmd_user_timeline(args):
+    """Fetch recent tweets from a specific user."""
+    import requests
+    auth = get_oauth1()
+    target = args.username.lstrip("@")
+    user_id = _resolve_username(target)
+    # Fetch their tweets
+    n = max(args.n, 5)
+    params = {
+        "max_results": n,
+        "tweet.fields": "created_at,author_id,conversation_id,in_reply_to_user_id,text,public_metrics",
+        "exclude": "retweets" if not args.include_rts else "",
+    }
+    if not params["exclude"]:
+        del params["exclude"]
+    resp = requests.get(f"{API_BASE}/users/{user_id}/tweets", params=params, auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    for tweet in (data.get("data") or []):
+        tweet["author"] = {"username": target}
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print(f"No tweets found for @{target}.", file=sys.stderr)
+
+
+# ── Commands: Engage ──
+
+
+def cmd_like(args):
+    """Like a tweet."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    resp = requests.post(
+        f"{API_BASE}/users/{user_id}/likes",
+        json={"tweet_id": args.tweet_id},
+        auth=auth,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_unlike(args):
+    """Unlike a tweet."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    resp = requests.delete(f"{API_BASE}/users/{user_id}/likes/{args.tweet_id}", auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_follow(args):
+    """Follow a user by username."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    target_id = _resolve_username(args.username)
+    resp = requests.post(
+        f"{API_BASE}/users/{user_id}/following",
+        json={"target_user_id": target_id},
+        auth=auth,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_retweet(args):
+    """Retweet a tweet."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    resp = requests.post(
+        f"{API_BASE}/users/{user_id}/retweets",
+        json={"tweet_id": args.tweet_id},
+        auth=auth,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_unretweet(args):
+    """Undo a retweet."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    resp = requests.delete(f"{API_BASE}/users/{user_id}/retweets/{args.tweet_id}", auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+# ── Commands: Moderate (mute/block) ──
+
+
+def cmd_mute(args):
+    """Mute a user by username."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    target_id = _resolve_username(args.username)
+    resp = requests.post(
+        f"{API_BASE}/users/{user_id}/muting",
+        json={"target_user_id": target_id},
+        auth=auth,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_unmute(args):
+    """Unmute a user by username."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    target_id = _resolve_username(args.username)
+    resp = requests.delete(f"{API_BASE}/users/{user_id}/muting/{target_id}", auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_block(args):
+    """Block a user by username."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    target_id = _resolve_username(args.username)
+    resp = requests.post(
+        f"{API_BASE}/users/{user_id}/blocking",
+        json={"target_user_id": target_id},
+        auth=auth,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_unblock(args):
+    """Unblock a user by username."""
+    import requests
+    auth = get_oauth1()
+    user_id = _get_my_user_id()
+    target_id = _resolve_username(args.username)
+    resp = requests.delete(f"{API_BASE}/users/{user_id}/blocking/{target_id}", auth=auth)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+# ── Commands: Account ──
+
+
+def cmd_verify(args):
+    client = get_client()
+    me = client.users.get_me()
+    print(f"Authenticated as: {me}")
+
+
+def cmd_me(args):
+    client = get_client()
+    me = client.users.get_me()
+    print(json.dumps(me, indent=2, default=str))
+
+
+def cmd_profile(args):
+    """Update profile bio — uses v1.1 API (XDK doesn't cover this)."""
+    import hashlib
+    import hmac
+    import base64
+    import time
+    import urllib.parse
+    import urllib.request
+
+    ck, cs, at, ats = _get_creds()
+
+    url = "https://api.twitter.com/1.1/account/update_profile.json"
+    params = {"description": args.text}
+
+    oauth = {
+        "oauth_consumer_key": ck,
+        "oauth_nonce": hashlib.md5(str(time.time()).encode()).hexdigest(),
+        "oauth_signature_method": "HMAC-SHA1",
+        "oauth_timestamp": str(int(time.time())),
+        "oauth_token": at,
+        "oauth_version": "1.0",
+    }
+    all_params = {**oauth, **params}
+    sorted_params = "&".join(
+        f'{urllib.parse.quote(k, safe="")}'
+        f'={urllib.parse.quote(str(v), safe="")}'
+        for k, v in sorted(all_params.items())
+    )
+    base_string = f'POST&{urllib.parse.quote(url, safe="")}&{urllib.parse.quote(sorted_params, safe="")}'
+    signing_key = f'{urllib.parse.quote(cs, safe="")}&{urllib.parse.quote(ats, safe="")}'
+    sig = base64.b64encode(
+        hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
+    ).decode()
+    oauth["oauth_signature"] = sig
+    auth_header = "OAuth " + ", ".join(
+        f'{k}="{urllib.parse.quote(v, safe="")}"' for k, v in sorted(oauth.items())
+    )
+
+    data = urllib.parse.urlencode(params).encode()
+    req = urllib.request.Request(
+        url, data=data, method="POST",
+        headers={"Authorization": auth_header, "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        result = json.loads(resp.read())
+        print(f"Bio updated: {result['description']}")
+
+
+# ── Commands: OAuth 2.0 PKCE Auth ──
+
+
+def cmd_auth(args):
+    """Run the OAuth 2.0 Authorization Code with PKCE flow interactively."""
+    import base64
+    import hashlib
+    import secrets
+    import time
+    import webbrowser
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from urllib.parse import urlencode, urlparse, parse_qs
+    import requests
+
+    client_id = _get_client_id()
+    client_secret = _get_client_secret()
+
+    # Generate PKCE parameters
+    code_verifier = secrets.token_urlsafe(96)[:128]
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    state = secrets.token_urlsafe(32)
+
+    redirect_uri = "http://127.0.0.1:8017/callback"
+    scopes = "bookmark.read bookmark.write tweet.read users.read offline.access"
+
+    auth_url = "https://twitter.com/i/oauth2/authorize?" + urlencode({
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": scopes,
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    })
+
+    # Capture the authorization code via local HTTP server
+    captured = {}
+
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            query = parse_qs(urlparse(self.path).query)
+            captured["code"] = query.get("code", [None])[0]
+            captured["state"] = query.get("state", [None])[0]
+            captured["error"] = query.get("error", [None])[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            if captured.get("code"):
+                self.wfile.write(b"<html><body><h2>Authorization successful!</h2>"
+                                 b"<p>You can close this tab and return to the terminal.</p>"
+                                 b"</body></html>")
+            else:
+                error = captured.get("error", "unknown")
+                self.wfile.write(f"<html><body><h2>Authorization failed: {error}</h2>"
+                                 f"</body></html>".encode())
+
+        def log_message(self, format, *log_args):
+            pass  # Suppress HTTP server logs
+
+    print("Starting OAuth 2.0 PKCE authorization flow...")
+    print(f"Opening browser for authorization...")
+    print(f"If the browser doesn't open, visit:\n  {auth_url}\n")
+
+    server = HTTPServer(("127.0.0.1", 8017), CallbackHandler)
+    webbrowser.open(auth_url)
+
+    # Wait for the callback (single request)
+    server.handle_request()
+    server.server_close()
+
+    if captured.get("error"):
+        print(f"Authorization failed: {captured['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    code = captured.get("code")
+    if not code:
+        print("Error: No authorization code received.", file=sys.stderr)
+        sys.exit(1)
+
+    if captured.get("state") != state:
+        print("Error: State mismatch — possible CSRF attack.", file=sys.stderr)
+        sys.exit(1)
+
+    # Exchange authorization code for tokens
+    token_data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "code_verifier": code_verifier,
+        "client_id": client_id,
+    }
+
+    token_auth = None
+    if client_secret:
+        token_auth = (client_id, client_secret)
+
+    resp = requests.post("https://api.x.com/2/oauth2/token", data=token_data, auth=token_auth)
+    if not resp.ok:
+        print(f"Error exchanging code for token: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+
+    result = resp.json()
+    tokens = {
+        "access_token": result["access_token"],
+        "refresh_token": result.get("refresh_token", ""),
+        "expires_at": int(time.time()) + result.get("expires_in", 7200),
+    }
+    _save_pkce_tokens(tokens)
+
+    print(f"Authorization successful! Tokens saved to {TOKEN_FILE}")
+    print(f"Token expires in {result.get('expires_in', 7200) // 60} minutes (auto-refreshes).")
+
+
+# ── Commands: Bookmarks (OAuth 2.0 PKCE) ──
+
+
+def cmd_bookmarks(args):
+    """List bookmarked tweets."""
+    import requests
+
+    # Get user ID via OAuth 2.0 (use /2/users/me with PKCE token)
+    headers = _oauth2_headers()
+    me_resp = requests.get(f"{API_BASE}/users/me", headers=headers)
+    if not me_resp.ok:
+        print(f"Error getting user: {me_resp.status_code} {me_resp.text}", file=sys.stderr)
+        sys.exit(1)
+    user_id = me_resp.json()["data"]["id"]
+
+    n = max(args.n, 1)
+    params = {
+        "max_results": min(n, 100),
+        "tweet.fields": "created_at,author_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(f"{API_BASE}/users/{user_id}/bookmarks", params=params, headers=headers)
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    _merge_authors(data)
+    for tweet in (data.get("data") or []):
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print("No bookmarks found.", file=sys.stderr)
+
+
+def cmd_bookmark(args):
+    """Bookmark a tweet."""
+    import requests
+
+    headers = _oauth2_headers()
+    headers["Content-Type"] = "application/json"
+    me_resp = requests.get(f"{API_BASE}/users/me", headers=_oauth2_headers())
+    if not me_resp.ok:
+        print(f"Error getting user: {me_resp.status_code} {me_resp.text}", file=sys.stderr)
+        sys.exit(1)
+    user_id = me_resp.json()["data"]["id"]
+
+    resp = requests.post(
+        f"{API_BASE}/users/{user_id}/bookmarks",
+        json={"tweet_id": args.tweet_id},
+        headers=headers,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_unbookmark(args):
+    """Remove a bookmark."""
+    import requests
+
+    headers = _oauth2_headers()
+    me_resp = requests.get(f"{API_BASE}/users/me", headers=headers)
+    if not me_resp.ok:
+        print(f"Error getting user: {me_resp.status_code} {me_resp.text}", file=sys.stderr)
+        sys.exit(1)
+    user_id = me_resp.json()["data"]["id"]
+
+    resp = requests.delete(
+        f"{API_BASE}/users/{user_id}/bookmarks/{args.tweet_id}",
+        headers=headers,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+# ── Commands: Filtered Stream (Bearer Token, Pro access) ──
+
+
+def cmd_stream_rules_add(args):
+    """Add a rule to the filtered stream."""
+    import requests
+
+    rule = {"value": args.rule}
+    if args.tag:
+        rule["tag"] = args.tag
+
+    resp = requests.post(
+        f"{API_BASE}/tweets/search/stream/rules",
+        json={"add": [rule]},
+        headers=_bearer_headers(),
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_stream_rules_list(args):
+    """List all filtered stream rules."""
+    import requests
+
+    resp = requests.get(
+        f"{API_BASE}/tweets/search/stream/rules",
+        headers=_bearer_headers(),
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    rules = data.get("data") or []
+    if not rules:
+        print("No stream rules configured.", file=sys.stderr)
+    else:
+        for rule in rules:
+            print(json.dumps(rule, indent=2, default=str))
+
+
+def cmd_stream_rules_delete(args):
+    """Delete a filtered stream rule by ID."""
+    import requests
+
+    resp = requests.post(
+        f"{API_BASE}/tweets/search/stream/rules",
+        json={"delete": {"ids": [args.rule_id]}},
+        headers=_bearer_headers(),
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(resp.json(), indent=2, default=str))
+
+
+def cmd_stream_filter(args):
+    """Connect to filtered stream and collect tweets (Pro access required)."""
+    import requests
+
+    n = args.n
+    params = {
+        "tweet.fields": "created_at,author_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(
+        f"{API_BASE}/tweets/search/stream",
+        params=params,
+        headers=_bearer_headers(),
+        stream=True,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        if resp.status_code == 403:
+            print("Hint: Filtered stream requires Pro access ($5,000/month).", file=sys.stderr)
+        sys.exit(1)
+
+    count = 0
+    try:
+        for line in resp.iter_lines():
+            if not line:
+                continue  # Skip keep-alive newlines
+            try:
+                tweet_data = json.loads(line)
+                print(json.dumps(tweet_data, indent=2, default=str))
+                count += 1
+                if count >= n:
+                    break
+            except json.JSONDecodeError:
+                continue
+    except KeyboardInterrupt:
+        pass
+    finally:
+        resp.close()
+
+
+# ── Commands: Volume Stream (Bearer Token, Pro access) ──
+
+
+def cmd_stream_sample(args):
+    """Connect to 1% volume stream and collect tweets (Pro access required)."""
+    import requests
+
+    n = args.n
+    params = {
+        "tweet.fields": "created_at,author_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(
+        f"{API_BASE}/tweets/sample/stream",
+        params=params,
+        headers=_bearer_headers(),
+        stream=True,
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        if resp.status_code == 403:
+            print("Hint: Volume stream requires Pro access ($5,000/month).", file=sys.stderr)
+        sys.exit(1)
+
+    count = 0
+    try:
+        for line in resp.iter_lines():
+            if not line:
+                continue  # Skip keep-alive newlines
+            try:
+                tweet_data = json.loads(line)
+                print(json.dumps(tweet_data, indent=2, default=str))
+                count += 1
+                if count >= n:
+                    break
+            except json.JSONDecodeError:
+                continue
+    except KeyboardInterrupt:
+        pass
+    finally:
+        resp.close()
+
+
+# ── Commands: Full-Archive Search (Bearer Token, Pro access) ──
+
+
+def cmd_search_all(args):
+    """Search the full archive of tweets (Pro access required)."""
+    import requests
+
+    n = max(args.n, 10)
+    params = {
+        "query": args.query,
+        "max_results": min(n, 500),
+        "tweet.fields": "created_at,author_id,conversation_id,text,public_metrics",
+        "expansions": "author_id",
+        "user.fields": "username,name",
+    }
+    resp = requests.get(
+        f"{API_BASE}/tweets/search/all",
+        params=params,
+        headers=_bearer_headers(),
+    )
+    if not resp.ok:
+        print(f"Error: {resp.status_code} {resp.text}", file=sys.stderr)
+        if resp.status_code == 403:
+            print("Hint: Full-archive search requires Pro access ($5,000/month).", file=sys.stderr)
+        sys.exit(1)
+    data = resp.json()
+    _merge_authors(data)
+    for tweet in (data.get("data") or []):
+        print(json.dumps(tweet, indent=2, default=str))
+    if not data.get("data"):
+        print("No results found.", file=sys.stderr)
+
+
+# ── CLI Entry Point ──
 
 
 def main():
-    parser = argparse.ArgumentParser(description="X/Twitter CLI (v2 API + OAuth1)")
+    parser = argparse.ArgumentParser(description="X/Twitter CLI (v2 API + OAuth1/Bearer/PKCE)")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # Post & Reply
     p_tweet = sub.add_parser("tweet", help="Post a tweet")
     p_tweet.add_argument("text", help="Tweet text (max 280 chars)")
 
@@ -586,8 +1214,24 @@ def main():
     p_reply.add_argument("tweet_id", help="Tweet ID to reply to")
     p_reply.add_argument("text", help="Reply text (max 280 chars)")
 
-    sub.add_parser("verify", help="Verify authentication")
-    sub.add_parser("me", help="Get your profile info")
+    p_delete = sub.add_parser("delete", help="Delete a tweet")
+    p_delete.add_argument("tweet_id", help="Tweet ID to delete")
+
+    # Read
+    p_get = sub.add_parser("get", help="Fetch a tweet by ID")
+    p_get.add_argument("tweet_id", help="Tweet ID")
+
+    p_thread = sub.add_parser("thread", help="Fetch conversation thread")
+    p_thread.add_argument("tweet_id", help="Any tweet ID in the thread")
+    p_thread.add_argument("-n", type=int, default=20, help="Max results")
+
+    p_thread_chain = sub.add_parser("thread-chain", help="Walk an author's full thread")
+    p_thread_chain.add_argument("tweet_id", help="Any tweet ID in the thread")
+    p_thread_chain.add_argument("-n", type=int, default=20, help="Max results")
+
+    p_quotes = sub.add_parser("quotes", help="Get quote tweets of a tweet")
+    p_quotes.add_argument("tweet_id", help="Tweet ID")
+    p_quotes.add_argument("-n", type=int, default=10, help="Max results")
 
     p_search = sub.add_parser("search", help="Search recent tweets")
     p_search.add_argument("query", help="Search query")
@@ -599,16 +1243,16 @@ def main():
     p_timeline = sub.add_parser("timeline", help="Get your timeline")
     p_timeline.add_argument("-n", type=int, default=10, help="Max results")
 
-    p_profile = sub.add_parser("profile", help="Update your bio")
-    p_profile.add_argument("text", help="New bio text")
+    # Research
+    p_user = sub.add_parser("user", help="Look up a user's profile")
+    p_user.add_argument("username", help="Username to look up (with or without @)")
 
-    p_get = sub.add_parser("get", help="Fetch a tweet by ID")
-    p_get.add_argument("tweet_id", help="Tweet ID")
+    p_user_tl = sub.add_parser("user-timeline", help="Get a user's recent tweets")
+    p_user_tl.add_argument("username", help="Username (with or without @)")
+    p_user_tl.add_argument("-n", type=int, default=10, help="Max results")
+    p_user_tl.add_argument("--include-rts", action="store_true", help="Include retweets")
 
-    p_thread = sub.add_parser("thread", help="Fetch conversation thread")
-    p_thread.add_argument("tweet_id", help="Any tweet ID in the thread")
-    p_thread.add_argument("-n", type=int, default=20, help="Max results")
-
+    # Engage
     p_like = sub.add_parser("like", help="Like a tweet")
     p_like.add_argument("tweet_id", help="Tweet ID to like")
 
@@ -624,48 +1268,108 @@ def main():
     p_unretweet = sub.add_parser("unretweet", help="Undo a retweet")
     p_unretweet.add_argument("tweet_id", help="Tweet ID to unretweet")
 
-    p_user = sub.add_parser("user", help="Look up a user's profile")
-    p_user.add_argument("username", help="Username to look up (with or without @)")
+    # Moderate
+    p_mute = sub.add_parser("mute", help="Mute a user")
+    p_mute.add_argument("username", help="Username to mute (with or without @)")
 
-    p_user_tl = sub.add_parser("user-timeline", help="Get a user's recent tweets")
-    p_user_tl.add_argument("username", help="Username (with or without @)")
-    p_user_tl.add_argument("-n", type=int, default=10, help="Max results")
-    p_user_tl.add_argument("--include-rts", action="store_true", help="Include retweets")
+    p_unmute = sub.add_parser("unmute", help="Unmute a user")
+    p_unmute.add_argument("username", help="Username to unmute (with or without @)")
 
-    p_thread_chain = sub.add_parser("thread-chain", help="Walk an author's full thread")
-    p_thread_chain.add_argument("tweet_id", help="Any tweet ID in the thread")
-    p_thread_chain.add_argument("-n", type=int, default=20, help="Max results")
+    p_block = sub.add_parser("block", help="Block a user")
+    p_block.add_argument("username", help="Username to block (with or without @)")
 
-    p_quotes = sub.add_parser("quotes", help="Get quote tweets of a tweet")
-    p_quotes.add_argument("tweet_id", help="Tweet ID")
-    p_quotes.add_argument("-n", type=int, default=10, help="Max results")
+    p_unblock = sub.add_parser("unblock", help="Unblock a user")
+    p_unblock.add_argument("username", help="Username to unblock (with or without @)")
 
-    p_delete = sub.add_parser("delete", help="Delete a tweet")
-    p_delete.add_argument("tweet_id", help="Tweet ID to delete")
+    # Account
+    sub.add_parser("verify", help="Verify authentication")
+    sub.add_parser("me", help="Get your profile info")
+
+    p_profile = sub.add_parser("profile", help="Update your bio")
+    p_profile.add_argument("text", help="New bio text")
+
+    # OAuth 2.0 PKCE
+    sub.add_parser("auth", help="Authorize OAuth 2.0 PKCE (required for bookmarks)")
+
+    # Bookmarks (requires OAuth 2.0 PKCE — run 'auth' first)
+    p_bookmarks = sub.add_parser("bookmarks", help="List your bookmarks (requires 'auth')")
+    p_bookmarks.add_argument("-n", type=int, default=20, help="Max results")
+
+    p_bookmark = sub.add_parser("bookmark", help="Bookmark a tweet (requires 'auth')")
+    p_bookmark.add_argument("tweet_id", help="Tweet ID to bookmark")
+
+    p_unbookmark = sub.add_parser("unbookmark", help="Remove a bookmark (requires 'auth')")
+    p_unbookmark.add_argument("tweet_id", help="Tweet ID to unbookmark")
+
+    # Filtered Stream (Pro access)
+    p_sr_add = sub.add_parser("stream-rules-add", help="Add a filtered stream rule (Pro)")
+    p_sr_add.add_argument("rule", help="Stream rule (e.g. 'keyword1 OR keyword2')")
+    p_sr_add.add_argument("--tag", default=None, help="Optional label for the rule")
+
+    sub.add_parser("stream-rules-list", help="List filtered stream rules (Pro)")
+
+    p_sr_del = sub.add_parser("stream-rules-delete", help="Delete a stream rule (Pro)")
+    p_sr_del.add_argument("rule_id", help="Rule ID to delete")
+
+    p_sf = sub.add_parser("stream-filter", help="Connect to filtered stream (Pro)")
+    p_sf.add_argument("-n", type=int, default=10, help="Number of tweets to collect")
+
+    # Volume Stream (Pro access)
+    p_ss = sub.add_parser("stream-sample", help="Connect to 1%% volume stream (Pro)")
+    p_ss.add_argument("-n", type=int, default=10, help="Number of tweets to collect")
+
+    # Full-Archive Search (Pro access)
+    p_sa = sub.add_parser("search-all", help="Full-archive search (Pro)")
+    p_sa.add_argument("query", help="Search query")
+    p_sa.add_argument("-n", type=int, default=10, help="Max results")
 
     args = parser.parse_args()
 
     commands = {
+        # Post & Reply
         "tweet": cmd_tweet,
         "reply": cmd_reply,
-        "verify": cmd_verify,
-        "me": cmd_me,
+        "delete": cmd_delete,
+        # Read
+        "get": cmd_get,
+        "thread": cmd_thread,
+        "thread-chain": cmd_thread_chain,
+        "quotes": cmd_quotes,
         "search": cmd_search,
         "mentions": cmd_mentions,
         "timeline": cmd_timeline,
-        "profile": cmd_profile,
-        "get": cmd_get,
-        "thread": cmd_thread,
+        # Research
+        "user": cmd_user,
+        "user-timeline": cmd_user_timeline,
+        # Engage
         "like": cmd_like,
         "unlike": cmd_unlike,
         "follow": cmd_follow,
         "retweet": cmd_retweet,
         "unretweet": cmd_unretweet,
-        "user": cmd_user,
-        "user-timeline": cmd_user_timeline,
-        "thread-chain": cmd_thread_chain,
-        "quotes": cmd_quotes,
-        "delete": cmd_delete,
+        # Moderate
+        "mute": cmd_mute,
+        "unmute": cmd_unmute,
+        "block": cmd_block,
+        "unblock": cmd_unblock,
+        # Account
+        "verify": cmd_verify,
+        "me": cmd_me,
+        "profile": cmd_profile,
+        # Auth
+        "auth": cmd_auth,
+        # Bookmarks
+        "bookmarks": cmd_bookmarks,
+        "bookmark": cmd_bookmark,
+        "unbookmark": cmd_unbookmark,
+        # Streams (Pro)
+        "stream-rules-add": cmd_stream_rules_add,
+        "stream-rules-list": cmd_stream_rules_list,
+        "stream-rules-delete": cmd_stream_rules_delete,
+        "stream-filter": cmd_stream_filter,
+        "stream-sample": cmd_stream_sample,
+        # Full-archive search (Pro)
+        "search-all": cmd_search_all,
     }
 
     commands[args.command](args)

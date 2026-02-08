@@ -1,11 +1,11 @@
 ---
 name: xpost
-description: "X/Twitter CLI for posting, reading, searching, and engagement via OAuth 1.0a API v2. Use for tweeting, replying, searching tweets, reading mentions/timelines, liking, retweeting, following, and managing tweets. Replaces bird (cookie auth) with proper OAuth."
+description: "X/Twitter CLI for posting, reading, searching, and engagement via API v2. Supports OAuth 1.0a (tweets, likes, follows, mutes, blocks), Bearer Token (streams, full-archive search), and OAuth 2.0 PKCE (bookmarks). Replaces bird (cookie auth) with proper OAuth."
 ---
 
-# xpost 🐦‍⬛
+# xpost
 
-X/Twitter CLI using API v2 with OAuth 1.0a authentication.
+X/Twitter CLI using API v2 with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE authentication.
 
 ## Install
 
@@ -15,7 +15,15 @@ bash <skill-dir>/install.sh
 
 Copies `xpost.py` into workspace `scripts/` and installs Python dependencies.
 
-Requires env vars: `X_CONSUMER_KEY`, `X_CONSUMER_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
+### Required Env Vars (OAuth 1.0a — core functionality)
+
+`X_CONSUMER_KEY`, `X_CONSUMER_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
+
+### Optional Env Vars
+
+- `X_BEARER_TOKEN` — for streams and full-archive search (auto-generated from consumer keys if not set)
+- `X_CLIENT_ID` — for bookmarks (OAuth 2.0 PKCE, run `auth` command to set up)
+- `X_CLIENT_SECRET` — optional, for confidential OAuth 2.0 clients
 
 ## Commands
 
@@ -59,6 +67,41 @@ python3 scripts/xpost.py unretweet <tweet_id>
 python3 scripts/xpost.py follow <username>
 ```
 
+### Moderate
+
+```bash
+python3 scripts/xpost.py mute <username>              # Mute a user
+python3 scripts/xpost.py unmute <username>             # Unmute a user
+python3 scripts/xpost.py block <username>              # Block a user
+python3 scripts/xpost.py unblock <username>            # Unblock a user
+```
+
+### Bookmarks (requires OAuth 2.0 PKCE — run `auth` first)
+
+```bash
+python3 scripts/xpost.py auth                         # One-time PKCE setup (opens browser)
+python3 scripts/xpost.py bookmarks -n 20              # List your bookmarks
+python3 scripts/xpost.py bookmark <tweet_id>          # Bookmark a tweet
+python3 scripts/xpost.py unbookmark <tweet_id>        # Remove a bookmark
+```
+
+### Streams (requires Pro access — $5,000/month)
+
+```bash
+python3 scripts/xpost.py stream-rules-add "keyword"   # Add a filtered stream rule
+python3 scripts/xpost.py stream-rules-add "from:user" --tag "tracking"
+python3 scripts/xpost.py stream-rules-list            # List current rules
+python3 scripts/xpost.py stream-rules-delete <rule_id> # Delete a rule
+python3 scripts/xpost.py stream-filter -n 10          # Collect tweets from filtered stream
+python3 scripts/xpost.py stream-sample -n 10          # Collect tweets from 1% volume stream
+```
+
+### Search (Full Archive — requires Pro access)
+
+```bash
+python3 scripts/xpost.py search-all "query" -n 10     # Search all historical tweets
+```
+
 ### Account
 
 ```bash
@@ -75,3 +118,6 @@ JSON objects with `id`, `text`, `edit_history_tweet_ids`. Search/mentions return
 
 - **280 char limit** — always check length before posting
 - Replaces `bird` (cookie auth, unreliable) — use xpost for all X operations
+- Streams and full-archive search require **Pro access** ($5,000/month) — will return 403 on lower tiers
+- Bookmarks require a one-time `auth` setup (OAuth 2.0 PKCE flow, opens browser)
+- Bearer Token is auto-generated from consumer keys if `X_BEARER_TOKEN` is not set

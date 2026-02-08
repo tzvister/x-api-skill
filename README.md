@@ -1,6 +1,6 @@
-# xpost 🐦‍⬛
+# xpost
 
-X/Twitter CLI for AI agents. Post, read, search, and engage on X using the official v2 API with OAuth 1.0a.
+X/Twitter CLI for AI agents. Post, read, search, and engage on X using the official v2 API with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE.
 
 Built as an [OpenClaw](https://openclaw.ai) / [AgentSkills](https://agentskills.io) skill — install it and your agent learns X/Twitter automatically.
 
@@ -8,6 +8,8 @@ Built as an [OpenClaw](https://openclaw.ai) / [AgentSkills](https://agentskills.
 
 - **Proper OAuth 1.0a** — no cookie scraping, no browser sessions
 - **Full X API v2** — tweet, reply, search, threads, likes, retweets, follows
+- **Mute, block, bookmarks** — full moderation and bookmark management
+- **Streaming & full-archive** — filtered stream, volume stream, and historical search (Pro)
 - **Single script** — one Python file, minimal dependencies
 - **Agent-native** — JSON output, skill metadata, install script
 
@@ -36,6 +38,12 @@ pip install requests requests-oauthlib
 - `requests` + `requests-oauthlib`
 - X API credentials ([developer.x.com](https://developer.x.com/en/portal/dashboard))
 
+## Authentication
+
+xpost supports three authentication methods, each covering different API features:
+
+### OAuth 1.0a (required — core functionality)
+
 Set these environment variables (or add to OpenClaw `env.vars`):
 
 ```bash
@@ -44,6 +52,38 @@ export X_CONSUMER_SECRET="..."
 export X_ACCESS_TOKEN="..."
 export X_ACCESS_TOKEN_SECRET="..."
 ```
+
+Covers: tweet, reply, delete, like, unlike, retweet, follow, mute, block, search, timelines, user lookup.
+
+### Bearer Token (optional — streams & full-archive search)
+
+```bash
+export X_BEARER_TOKEN="..."
+```
+
+If not set, xpost auto-generates a Bearer Token from your consumer key/secret. Required for:
+- Filtered stream (`stream-filter`)
+- Volume stream (`stream-sample`)
+- Full-archive search (`search-all`)
+
+> **Note:** These endpoints require **Pro access** ($5,000/month). They will return a 403 error on Free/Basic tiers.
+
+### OAuth 2.0 PKCE (optional — bookmarks)
+
+```bash
+export X_CLIENT_ID="..."
+export X_CLIENT_SECRET="..."   # optional, for confidential clients
+```
+
+Then run the one-time authorization flow:
+
+```bash
+python3 scripts/xpost.py auth
+```
+
+This opens your browser for authorization and stores tokens in `~/.xpost/tokens.json`. Tokens auto-refresh when expired.
+
+Required for: `bookmarks`, `bookmark`, `unbookmark`.
 
 ## Commands
 
@@ -58,9 +98,16 @@ python3 $xpost delete <tweet_id>
 # Read
 python3 $xpost get <tweet_id>
 python3 $xpost thread <tweet_id>
+python3 $xpost thread-chain <tweet_id>
+python3 $xpost quotes <tweet_id>
 python3 $xpost search "query" -n 20
 python3 $xpost mentions -n 10
 python3 $xpost timeline -n 10
+
+# Research
+python3 $xpost user <username>
+python3 $xpost user-timeline <username> -n 10
+python3 $xpost user-timeline <username> --include-rts
 
 # Engage
 python3 $xpost like <tweet_id>
@@ -68,6 +115,28 @@ python3 $xpost unlike <tweet_id>
 python3 $xpost retweet <tweet_id>
 python3 $xpost unretweet <tweet_id>
 python3 $xpost follow <username>
+
+# Moderate
+python3 $xpost mute <username>
+python3 $xpost unmute <username>
+python3 $xpost block <username>
+python3 $xpost unblock <username>
+
+# Bookmarks (run 'auth' first)
+python3 $xpost auth
+python3 $xpost bookmarks -n 20
+python3 $xpost bookmark <tweet_id>
+python3 $xpost unbookmark <tweet_id>
+
+# Streams (Pro access)
+python3 $xpost stream-rules-add "keyword" --tag "label"
+python3 $xpost stream-rules-list
+python3 $xpost stream-rules-delete <rule_id>
+python3 $xpost stream-filter -n 10
+python3 $xpost stream-sample -n 10
+
+# Full-archive search (Pro access)
+python3 $xpost search-all "query" -n 10
 
 # Account
 python3 $xpost verify
@@ -93,6 +162,9 @@ All commands return JSON. Tweet objects include `id`, `text`, and `edit_history_
 - **280 character limit** on tweets — the script enforces this
 - Profile update uses the v1.1 API (only endpoint not yet on v2)
 - Access tokens inherit permission scope at generation time — regenerate after changing app permissions
+- Streams and full-archive search require **Pro access** ($5,000/month) — will return 403 on lower tiers
+- Bookmarks require a one-time `auth` setup (OAuth 2.0 PKCE flow)
+- Bearer Token is auto-generated from consumer key/secret if `X_BEARER_TOKEN` is not set
 
 ## License
 
@@ -100,4 +172,4 @@ MIT
 
 ---
 
-*Built by [SynACK](https://syn-ack.ai) 👻*
+*Built by [SynACK](https://syn-ack.ai)*
