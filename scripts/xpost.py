@@ -1147,6 +1147,46 @@ def cmd_auth(args):
 # ── Commands: Bookmarks (OAuth 2.0 PKCE) ──
 
 
+def _enrich_tweets_oauth2(tweets, headers):
+    """Fetch full tweet details for tweets that are missing text (e.g. from bookmarks).
+
+    Uses the OAuth 2.0 token to do a batch /2/tweets lookup and merges text,
+    author info, and metrics back into the original tweet objects.
+    """
+    import requests
+
+    if not tweets:
+        return tweets
+
+    ids_missing_text = [t["id"] for t in tweets if not t.get("text")]
+    if not ids_missing_text:
+        return tweets  # all tweets already have text
+
+    # Batch lookup — /2/tweets accepts up to 100 IDs per request
+    full_map = {}
+    for i in range(0, len(ids_missing_text), 100):
+        batch = ids_missing_text[i : i + 100]
+        params = {
+            "ids": ",".join(batch),
+            "tweet.fields": "created_at,author_id,text,public_metrics",
+            "expansions": "author_id",
+            "user.fields": "username,name",
+        }
+        resp = requests.get(f"{API_BASE}/tweets", params=params, headers=headers)
+        if resp.ok:
+            lookup = resp.json()
+            _merge_authors(lookup)
+            for t in (lookup.get("data") or []):
+                full_map[t["id"]] = t
+
+    # Merge fetched details back into original tweets
+    for tweet in tweets:
+        if tweet["id"] in full_map:
+            tweet.update(full_map[tweet["id"]])
+
+    return tweets
+
+
 def cmd_bookmarks(args):
     """List bookmarked tweets."""
     import requests
@@ -1172,9 +1212,12 @@ def cmd_bookmarks(args):
         sys.exit(1)
     data = resp.json()
     _merge_authors(data)
-    for tweet in (data.get("data") or []):
+    tweets = data.get("data") or []
+    # Enrich tweets that may be missing text (API sometimes returns only IDs)
+    _enrich_tweets_oauth2(tweets, headers)
+    for tweet in tweets:
         print(json.dumps(tweet, indent=2, default=str))
-    if not data.get("data"):
+    if not tweets:
         print("No bookmarks found.", file=sys.stderr)
 
 
@@ -1272,9 +1315,11 @@ def cmd_bookmarks_folder(args):
         sys.exit(1)
     data = resp.json()
     _merge_authors(data)
-    for tweet in (data.get("data") or []):
+    tweets = data.get("data") or []
+    _enrich_tweets_oauth2(tweets, headers)
+    for tweet in tweets:
         print(json.dumps(tweet, indent=2, default=str))
-    if not data.get("data"):
+    if not tweets:
         print("No bookmarks found in this folder.", file=sys.stderr)
 
 
