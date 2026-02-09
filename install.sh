@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SKILL_NAME="xpost"
-REPO="syn-ack-ai/xpost"
+REPO="tzvister/xpost"
 BRANCH="${XPOST_BRANCH:-master}"
 BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
 

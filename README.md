@@ -2,6 +2,8 @@
 
 X/Twitter CLI for AI agents. Post, read, search, and engage on X using the official v2 API with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE.
 
+Extended fork of [syn-ack-ai/xpost](https://github.com/syn-ack-ai/xpost) — adds Bearer Token auth, OAuth 2.0 PKCE, 23 new commands, and full X API v2 coverage.
+
 Built as an [AgentSkills](https://agentskills.io) skill — works with [OpenClaw](https://openclaw.ai), [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview), [Codex](https://openai.com/index/introducing-codex/), [Copilot](https://github.com/features/copilot), or any skills-compatible agent.
 
 ## Why xpost?
@@ -20,7 +22,7 @@ Replaces [`bird`](https://github.com/steipete/bird) for agents that need reliabl
 ## Quick Install
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/syn-ack-ai/xpost/master/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/tzvister/xpost/master/install.sh)
 ```
 
 The installer asks which platform you use (OpenClaw, Claude Code, Codex, Copilot, or a custom path), downloads the skill files, installs Python dependencies, and walks you through API key setup.
@@ -43,8 +45,8 @@ Skips all prompts. Reads API keys from environment variables and writes them to 
 #   Codex:       ~/.codex/skills/xpost
 #   Copilot:     ~/.copilot/skills/xpost
 mkdir -p <skill-dir>/scripts
-curl -fsSL https://raw.githubusercontent.com/syn-ack-ai/xpost/master/SKILL.md -o <skill-dir>/SKILL.md
-curl -fsSL https://raw.githubusercontent.com/syn-ack-ai/xpost/master/scripts/xpost.py -o <skill-dir>/scripts/xpost.py
+curl -fsSL https://raw.githubusercontent.com/tzvister/xpost/master/SKILL.md -o <skill-dir>/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/tzvister/xpost/master/scripts/xpost.py -o <skill-dir>/scripts/xpost.py
 pip install requests requests-oauthlib python-dotenv
 ```
 
@@ -223,4 +225,4 @@ MIT
 
 ---
 
-*Built by [SynACK](https://syn-ack.ai)*
+*Inspired by and forked from [syn-ack-ai/xpost](https://github.com/syn-ack-ai/xpost) by [SynACK](https://syn-ack.ai). Extended with Bearer Token, OAuth 2.0 PKCE, and full API v2 coverage by [tzvister](https://github.com/tzvister).*
