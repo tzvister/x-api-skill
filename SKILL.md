@@ -1,14 +1,14 @@
 ---
-name: xpost
+name: x-api-skill
 description: "Complete X/Twitter CLI for AI agents — 58 commands covering the full API v2. Post, read, search, engage, moderate, DM, manage lists, bookmarks, trends, spaces, and streams. All output is JSON. Supports OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE."
 ---
 
-# xpost
+# x-api-skill
 
 X/Twitter CLI with complete API v2 coverage. Every command outputs structured JSON to stdout. Errors go to stderr with a non-zero exit code.
 
-**Script location:** `<skill-dir>/scripts/xpost.py`
-**Invocation:** `python3 <skill-dir>/scripts/xpost.py <command> [args]`
+**Script location:** `<skill-dir>/scripts/x-api-skill.py`
+**Invocation:** `python3 <skill-dir>/scripts/x-api-skill.py <command> [args]`
 
 ## Setup
 
@@ -37,7 +37,7 @@ X_ACCESS_TOKEN="<value from user>"
 X_ACCESS_TOKEN_SECRET="<value from user>"
 ```
 
-After writing, verify with: `python3 <skill-dir>/scripts/xpost.py verify`
+After writing, verify with: `python3 <skill-dir>/scripts/x-api-skill.py verify`
 
 ### Step 2: Bearer Token (optional — unlocks trends, spaces, streams)
 
@@ -68,8 +68,8 @@ X_CLIENT_ID="<value from user>"
 X_CLIENT_SECRET="<value from user>"
 ```
 
-Then run the one-time browser auth: `python3 <skill-dir>/scripts/xpost.py auth`
-This opens the user's browser. They must sign in and click "Authorize app". Tokens are saved to `~/.xpost/tokens.json` and auto-refresh.
+Then run the one-time browser auth: `python3 <skill-dir>/scripts/x-api-skill.py auth`
+This opens the user's browser. They must sign in and click "Authorize app". Tokens are saved to `~/.x-api-skill/tokens.json` and auto-refresh.
 
 **Note:** The `auth` command is interactive (opens a browser) — it cannot be run headlessly.
 
@@ -90,7 +90,7 @@ This opens the user's browser. They must sign in and click "Authorize app". Toke
 #### `tweet` — Post a new tweet
 
 ```bash
-python3 scripts/xpost.py tweet "Your tweet text here"
+python3 scripts/x-api-skill.py tweet "Your tweet text here"
 ```
 
 - **text** (required): Tweet content, max 280 characters. Fails if over limit.
@@ -100,7 +100,7 @@ python3 scripts/xpost.py tweet "Your tweet text here"
 #### `reply` — Reply to a tweet
 
 ```bash
-python3 scripts/xpost.py reply 1234567890 "Your reply text"
+python3 scripts/x-api-skill.py reply 1234567890 "Your reply text"
 ```
 
 - **tweet_id** (required): ID of the tweet to reply to.
@@ -111,7 +111,7 @@ python3 scripts/xpost.py reply 1234567890 "Your reply text"
 #### `delete` — Delete a tweet you posted
 
 ```bash
-python3 scripts/xpost.py delete 1234567890
+python3 scripts/x-api-skill.py delete 1234567890
 ```
 
 - **tweet_id** (required): ID of your tweet to delete.
@@ -125,7 +125,7 @@ python3 scripts/xpost.py delete 1234567890
 #### `get` — Fetch a single tweet by ID
 
 ```bash
-python3 scripts/xpost.py get 1234567890
+python3 scripts/x-api-skill.py get 1234567890
 ```
 
 - **tweet_id** (required): The tweet ID to fetch.
@@ -135,7 +135,7 @@ python3 scripts/xpost.py get 1234567890
 #### `thread` — Get all replies in a conversation
 
 ```bash
-python3 scripts/xpost.py thread 1234567890 -n 20
+python3 scripts/x-api-skill.py thread 1234567890 -n 20
 ```
 
 - **tweet_id** (required): Any tweet ID in the conversation.
@@ -146,7 +146,7 @@ python3 scripts/xpost.py thread 1234567890 -n 20
 #### `thread-chain` — Walk an author's full thread (chronological)
 
 ```bash
-python3 scripts/xpost.py thread-chain 1234567890 -n 20
+python3 scripts/x-api-skill.py thread-chain 1234567890 -n 20
 ```
 
 - **tweet_id** (required): Any tweet ID in the thread.
@@ -157,7 +157,7 @@ python3 scripts/xpost.py thread-chain 1234567890 -n 20
 #### `quotes` — Get quote tweets of a tweet
 
 ```bash
-python3 scripts/xpost.py quotes 1234567890 -n 10
+python3 scripts/x-api-skill.py quotes 1234567890 -n 10
 ```
 
 - **tweet_id** (required): The original tweet ID.
@@ -168,7 +168,7 @@ python3 scripts/xpost.py quotes 1234567890 -n 10
 #### `search` — Search recent tweets (last 7 days)
 
 ```bash
-python3 scripts/xpost.py search "AI agents" -n 10
+python3 scripts/x-api-skill.py search "AI agents" -n 10
 ```
 
 - **query** (required): Search query. Supports X search operators (`from:user`, `#hashtag`, `-filter:retweets`, etc.).
@@ -179,7 +179,7 @@ python3 scripts/xpost.py search "AI agents" -n 10
 #### `mentions` — Get your mentions
 
 ```bash
-python3 scripts/xpost.py mentions -n 10
+python3 scripts/x-api-skill.py mentions -n 10
 ```
 
 - **-n** (optional, default 10): Max results.
@@ -189,7 +189,7 @@ python3 scripts/xpost.py mentions -n 10
 #### `timeline` — Get your home timeline
 
 ```bash
-python3 scripts/xpost.py timeline -n 10
+python3 scripts/x-api-skill.py timeline -n 10
 ```
 
 - **-n** (optional, default 10): Max results.
@@ -203,7 +203,7 @@ python3 scripts/xpost.py timeline -n 10
 #### `user` — Look up a user's profile
 
 ```bash
-python3 scripts/xpost.py user NASA
+python3 scripts/x-api-skill.py user NASA
 ```
 
 - **username** (required): Username with or without `@`.
@@ -213,8 +213,8 @@ python3 scripts/xpost.py user NASA
 #### `user-timeline` — Get a user's recent tweets
 
 ```bash
-python3 scripts/xpost.py user-timeline NASA -n 10
-python3 scripts/xpost.py user-timeline NASA -n 10 --include-rts
+python3 scripts/x-api-skill.py user-timeline NASA -n 10
+python3 scripts/x-api-skill.py user-timeline NASA -n 10 --include-rts
 ```
 
 - **username** (required): Username with or without `@`.
@@ -226,7 +226,7 @@ python3 scripts/xpost.py user-timeline NASA -n 10 --include-rts
 #### `followers` — List a user's followers
 
 ```bash
-python3 scripts/xpost.py followers openai -n 100
+python3 scripts/x-api-skill.py followers openai -n 100
 ```
 
 - **username** (required): Username with or without `@`.
@@ -237,7 +237,7 @@ python3 scripts/xpost.py followers openai -n 100
 #### `following` — List who a user follows
 
 ```bash
-python3 scripts/xpost.py following openai -n 100
+python3 scripts/x-api-skill.py following openai -n 100
 ```
 
 - **username** (required): Username with or without `@`.
@@ -248,7 +248,7 @@ python3 scripts/xpost.py following openai -n 100
 #### `liked` — List tweets liked by a user
 
 ```bash
-python3 scripts/xpost.py liked myusername -n 20
+python3 scripts/x-api-skill.py liked myusername -n 20
 ```
 
 - **username** (required): Username with or without `@`.
@@ -260,7 +260,7 @@ python3 scripts/xpost.py liked myusername -n 20
 #### `liking-users` — List users who liked a specific tweet
 
 ```bash
-python3 scripts/xpost.py liking-users 1234567890
+python3 scripts/x-api-skill.py liking-users 1234567890
 ```
 
 - **tweet_id** (required): The tweet ID.
@@ -270,7 +270,7 @@ python3 scripts/xpost.py liking-users 1234567890
 #### `retweeters` — List users who retweeted a specific tweet
 
 ```bash
-python3 scripts/xpost.py retweeters 1234567890
+python3 scripts/x-api-skill.py retweeters 1234567890
 ```
 
 - **tweet_id** (required): The tweet ID.
@@ -284,8 +284,8 @@ python3 scripts/xpost.py retweeters 1234567890
 #### `like` / `unlike` — Like or unlike a tweet
 
 ```bash
-python3 scripts/xpost.py like 1234567890
-python3 scripts/xpost.py unlike 1234567890
+python3 scripts/x-api-skill.py like 1234567890
+python3 scripts/x-api-skill.py unlike 1234567890
 ```
 
 - **tweet_id** (required): The tweet to like/unlike.
@@ -294,8 +294,8 @@ python3 scripts/xpost.py unlike 1234567890
 #### `retweet` / `unretweet` — Retweet or undo a retweet
 
 ```bash
-python3 scripts/xpost.py retweet 1234567890
-python3 scripts/xpost.py unretweet 1234567890
+python3 scripts/x-api-skill.py retweet 1234567890
+python3 scripts/x-api-skill.py unretweet 1234567890
 ```
 
 - **tweet_id** (required): The tweet to retweet/unretweet.
@@ -304,8 +304,8 @@ python3 scripts/xpost.py unretweet 1234567890
 #### `follow` / `unfollow` — Follow or unfollow a user
 
 ```bash
-python3 scripts/xpost.py follow NASA
-python3 scripts/xpost.py unfollow NASA
+python3 scripts/x-api-skill.py follow NASA
+python3 scripts/x-api-skill.py unfollow NASA
 ```
 
 - **username** (required): Username with or without `@`.
@@ -319,8 +319,8 @@ python3 scripts/xpost.py unfollow NASA
 #### `hide` / `unhide` — Hide or unhide a reply to your tweet
 
 ```bash
-python3 scripts/xpost.py hide 1234567890
-python3 scripts/xpost.py unhide 1234567890
+python3 scripts/x-api-skill.py hide 1234567890
+python3 scripts/x-api-skill.py unhide 1234567890
 ```
 
 - **tweet_id** (required): The reply tweet ID to hide/unhide. Must be a reply to one of your tweets.
@@ -334,8 +334,8 @@ python3 scripts/xpost.py unhide 1234567890
 #### `mute` / `unmute` — Mute or unmute a user
 
 ```bash
-python3 scripts/xpost.py mute spammer123
-python3 scripts/xpost.py unmute spammer123
+python3 scripts/x-api-skill.py mute spammer123
+python3 scripts/x-api-skill.py unmute spammer123
 ```
 
 - **username** (required): Username with or without `@`.
@@ -345,8 +345,8 @@ python3 scripts/xpost.py unmute spammer123
 #### `block` / `unblock` — Block or unblock a user
 
 ```bash
-python3 scripts/xpost.py block spammer123
-python3 scripts/xpost.py unblock spammer123
+python3 scripts/x-api-skill.py block spammer123
+python3 scripts/x-api-skill.py unblock spammer123
 ```
 
 - **username** (required): Username with or without `@`.
@@ -362,7 +362,7 @@ python3 scripts/xpost.py unblock spammer123
 #### `dm` — Send a direct message
 
 ```bash
-python3 scripts/xpost.py dm johndoe "Hey, let's connect!"
+python3 scripts/x-api-skill.py dm johndoe "Hey, let's connect!"
 ```
 
 - **username** (required): Recipient username with or without `@`.
@@ -373,7 +373,7 @@ python3 scripts/xpost.py dm johndoe "Hey, let's connect!"
 #### `dm-list` — List recent DM events
 
 ```bash
-python3 scripts/xpost.py dm-list -n 20
+python3 scripts/x-api-skill.py dm-list -n 20
 ```
 
 - **-n** (optional, default 20): Max results (1-100).
@@ -383,7 +383,7 @@ python3 scripts/xpost.py dm-list -n 20
 #### `dm-conversation` — List DMs in a specific conversation
 
 ```bash
-python3 scripts/xpost.py dm-conversation 12345-67890 -n 20
+python3 scripts/x-api-skill.py dm-conversation 12345-67890 -n 20
 ```
 
 - **conversation_id** (required): The DM conversation ID (from `dm-list` output).
@@ -398,7 +398,7 @@ python3 scripts/xpost.py dm-conversation 12345-67890 -n 20
 #### `verify` — Test that authentication works
 
 ```bash
-python3 scripts/xpost.py verify
+python3 scripts/x-api-skill.py verify
 ```
 
 - **Returns:** Confirmation message with your username if auth is valid.
@@ -407,7 +407,7 @@ python3 scripts/xpost.py verify
 #### `me` — Get your own profile info
 
 ```bash
-python3 scripts/xpost.py me
+python3 scripts/x-api-skill.py me
 ```
 
 - **Returns:** Your user object with `id`, `username`, `name`, `description`, `public_metrics`.
@@ -416,7 +416,7 @@ python3 scripts/xpost.py me
 #### `profile` — Update your bio
 
 ```bash
-python3 scripts/xpost.py profile "Building AI tools for everyone"
+python3 scripts/x-api-skill.py profile "Building AI tools for everyone"
 ```
 
 - **text** (required): New bio text.
@@ -427,11 +427,11 @@ python3 scripts/xpost.py profile "Building AI tools for everyone"
 #### `auth` — One-time OAuth 2.0 PKCE authorization
 
 ```bash
-python3 scripts/xpost.py auth
+python3 scripts/x-api-skill.py auth
 ```
 
 - **Requires:** `X_CLIENT_ID` env var set. Opens a browser for authorization.
-- **Stores:** Tokens in `~/.xpost/tokens.json`. Auto-refreshes when expired.
+- **Stores:** Tokens in `~/.x-api-skill/tokens.json`. Auto-refreshes when expired.
 - **Run once** before using any bookmark commands. Not scriptable — requires interactive browser.
 
 ---
@@ -441,7 +441,7 @@ python3 scripts/xpost.py auth
 #### `bookmarks` — List your bookmarked tweets
 
 ```bash
-python3 scripts/xpost.py bookmarks -n 20
+python3 scripts/x-api-skill.py bookmarks -n 20
 ```
 
 - **-n** (optional, default 20): Max results.
@@ -451,8 +451,8 @@ python3 scripts/xpost.py bookmarks -n 20
 #### `bookmark` / `unbookmark` — Add or remove a bookmark
 
 ```bash
-python3 scripts/xpost.py bookmark 1234567890
-python3 scripts/xpost.py unbookmark 1234567890
+python3 scripts/x-api-skill.py bookmark 1234567890
+python3 scripts/x-api-skill.py unbookmark 1234567890
 ```
 
 - **tweet_id** (required): Tweet to bookmark/unbookmark.
@@ -461,7 +461,7 @@ python3 scripts/xpost.py unbookmark 1234567890
 #### `bookmark-folders` — List your bookmark folders
 
 ```bash
-python3 scripts/xpost.py bookmark-folders
+python3 scripts/x-api-skill.py bookmark-folders
 ```
 
 - **Returns:** Folder objects with folder IDs and names.
@@ -470,7 +470,7 @@ python3 scripts/xpost.py bookmark-folders
 #### `bookmarks-folder` — List bookmarks in a specific folder
 
 ```bash
-python3 scripts/xpost.py bookmarks-folder FOLDER_ID -n 20
+python3 scripts/x-api-skill.py bookmarks-folder FOLDER_ID -n 20
 ```
 
 - **folder_id** (required): Folder ID from `bookmark-folders` output.
@@ -484,7 +484,7 @@ python3 scripts/xpost.py bookmarks-folder FOLDER_ID -n 20
 #### `my-lists` — List your owned lists
 
 ```bash
-python3 scripts/xpost.py my-lists
+python3 scripts/x-api-skill.py my-lists
 ```
 
 - **Returns:** List objects with `id`, `name`, `description`, `member_count`, `follower_count`, `private`, `created_at`.
@@ -493,7 +493,7 @@ python3 scripts/xpost.py my-lists
 #### `list` — Look up a list by ID
 
 ```bash
-python3 scripts/xpost.py list 1234567890
+python3 scripts/x-api-skill.py list 1234567890
 ```
 
 - **list_id** (required): The list ID.
@@ -502,7 +502,7 @@ python3 scripts/xpost.py list 1234567890
 #### `list-create` — Create a new list
 
 ```bash
-python3 scripts/xpost.py list-create "AI News" --description "Top AI accounts" --private
+python3 scripts/x-api-skill.py list-create "AI News" --description "Top AI accounts" --private
 ```
 
 - **name** (required): List name.
@@ -514,7 +514,7 @@ python3 scripts/xpost.py list-create "AI News" --description "Top AI accounts" -
 #### `list-delete` — Delete a list you own
 
 ```bash
-python3 scripts/xpost.py list-delete 1234567890
+python3 scripts/x-api-skill.py list-delete 1234567890
 ```
 
 - **list_id** (required): List ID to delete.
@@ -523,7 +523,7 @@ python3 scripts/xpost.py list-delete 1234567890
 #### `list-tweets` — Get tweets from a list's timeline
 
 ```bash
-python3 scripts/xpost.py list-tweets 1234567890 -n 20
+python3 scripts/x-api-skill.py list-tweets 1234567890 -n 20
 ```
 
 - **list_id** (required): The list ID.
@@ -534,7 +534,7 @@ python3 scripts/xpost.py list-tweets 1234567890 -n 20
 #### `list-members` — List members of a list
 
 ```bash
-python3 scripts/xpost.py list-members 1234567890
+python3 scripts/x-api-skill.py list-members 1234567890
 ```
 
 - **list_id** (required): The list ID.
@@ -543,8 +543,8 @@ python3 scripts/xpost.py list-members 1234567890
 #### `list-add-member` / `list-remove-member` — Add or remove a list member
 
 ```bash
-python3 scripts/xpost.py list-add-member 1234567890 NASA
-python3 scripts/xpost.py list-remove-member 1234567890 NASA
+python3 scripts/x-api-skill.py list-add-member 1234567890 NASA
+python3 scripts/x-api-skill.py list-remove-member 1234567890 NASA
 ```
 
 - **list_id** (required): The list ID.
@@ -558,7 +558,7 @@ python3 scripts/xpost.py list-remove-member 1234567890 NASA
 #### `trends` — Get trending topics for a location
 
 ```bash
-python3 scripts/xpost.py trends --woeid 1
+python3 scripts/x-api-skill.py trends --woeid 1
 ```
 
 - **--woeid** (optional, default 1): Where On Earth ID. Common values:
@@ -577,7 +577,7 @@ python3 scripts/xpost.py trends --woeid 1
 #### `spaces` — Search for X Spaces
 
 ```bash
-python3 scripts/xpost.py spaces "AI startups"
+python3 scripts/x-api-skill.py spaces "AI startups"
 ```
 
 - **query** (required): Search query.
@@ -588,7 +588,7 @@ python3 scripts/xpost.py spaces "AI startups"
 #### `space` — Look up a Space by ID
 
 ```bash
-python3 scripts/xpost.py space 1AbCdEfGh
+python3 scripts/x-api-skill.py space 1AbCdEfGh
 ```
 
 - **space_id** (required): The Space ID (from `spaces` output).
@@ -604,7 +604,7 @@ These commands connect to real-time tweet streams. They will return 403 on Free/
 #### `stream-rules-add` — Add a filtered stream rule
 
 ```bash
-python3 scripts/xpost.py stream-rules-add "AI OR machine learning" --tag "ai-tracking"
+python3 scripts/x-api-skill.py stream-rules-add "AI OR machine learning" --tag "ai-tracking"
 ```
 
 - **rule** (required): Filter rule using X stream operators.
@@ -614,7 +614,7 @@ python3 scripts/xpost.py stream-rules-add "AI OR machine learning" --tag "ai-tra
 #### `stream-rules-list` — List current stream rules
 
 ```bash
-python3 scripts/xpost.py stream-rules-list
+python3 scripts/x-api-skill.py stream-rules-list
 ```
 
 - **Returns:** Array of rule objects.
@@ -622,7 +622,7 @@ python3 scripts/xpost.py stream-rules-list
 #### `stream-rules-delete` — Delete a stream rule
 
 ```bash
-python3 scripts/xpost.py stream-rules-delete RULE_ID
+python3 scripts/x-api-skill.py stream-rules-delete RULE_ID
 ```
 
 - **rule_id** (required): Rule ID from `stream-rules-list`.
@@ -631,7 +631,7 @@ python3 scripts/xpost.py stream-rules-delete RULE_ID
 #### `stream-filter` — Connect to filtered stream
 
 ```bash
-python3 scripts/xpost.py stream-filter -n 10
+python3 scripts/x-api-skill.py stream-filter -n 10
 ```
 
 - **-n** (optional, default 10): Number of tweets to collect before disconnecting.
@@ -641,7 +641,7 @@ python3 scripts/xpost.py stream-filter -n 10
 #### `stream-sample` — Connect to 1% volume stream
 
 ```bash
-python3 scripts/xpost.py stream-sample -n 10
+python3 scripts/x-api-skill.py stream-sample -n 10
 ```
 
 - **-n** (optional, default 10): Number of tweets to collect.
@@ -655,7 +655,7 @@ python3 scripts/xpost.py stream-sample -n 10
 #### `search-all` — Search all historical tweets
 
 ```bash
-python3 scripts/xpost.py search-all "from:NASA moon landing" -n 10
+python3 scripts/x-api-skill.py search-all "from:NASA moon landing" -n 10
 ```
 
 - **query** (required): Same syntax as `search`, but covers ALL historical tweets.
@@ -671,83 +671,83 @@ python3 scripts/xpost.py search-all "from:NASA moon landing" -n 10
 
 ```bash
 # 1. Search for recent discussion
-python3 scripts/xpost.py search "your topic" -n 20
+python3 scripts/x-api-skill.py search "your topic" -n 20
 
 # 2. Find interesting users from results
-python3 scripts/xpost.py user interesting_user
+python3 scripts/x-api-skill.py user interesting_user
 
 # 3. Follow them
-python3 scripts/xpost.py follow interesting_user
+python3 scripts/x-api-skill.py follow interesting_user
 
 # 4. Like a good tweet
-python3 scripts/xpost.py like TWEET_ID
+python3 scripts/x-api-skill.py like TWEET_ID
 
 # 5. Reply to start a conversation
-python3 scripts/xpost.py reply TWEET_ID "Great insight!"
+python3 scripts/x-api-skill.py reply TWEET_ID "Great insight!"
 ```
 
 ### Post a thread (multi-tweet)
 
 ```bash
 # 1. Post the first tweet
-python3 scripts/xpost.py tweet "1/3 Here's my take on..."
+python3 scripts/x-api-skill.py tweet "1/3 Here's my take on..."
 # Returns: {"data": {"id": "111..."}}
 
 # 2. Reply to it to continue the thread
-python3 scripts/xpost.py reply 111 "2/3 Furthermore..."
+python3 scripts/x-api-skill.py reply 111 "2/3 Furthermore..."
 # Returns: {"data": {"id": "222..."}}
 
 # 3. Continue replying to each new tweet
-python3 scripts/xpost.py reply 222 "3/3 In conclusion..."
+python3 scripts/x-api-skill.py reply 222 "3/3 In conclusion..."
 ```
 
 ### Curate a list
 
 ```bash
 # 1. Create a list
-python3 scripts/xpost.py list-create "AI Researchers" --description "Top AI accounts"
+python3 scripts/x-api-skill.py list-create "AI Researchers" --description "Top AI accounts"
 
 # 2. Add members (use the list ID from step 1)
-python3 scripts/xpost.py list-add-member LIST_ID ylecun
-python3 scripts/xpost.py list-add-member LIST_ID kaboreka
+python3 scripts/x-api-skill.py list-add-member LIST_ID ylecun
+python3 scripts/x-api-skill.py list-add-member LIST_ID kaboreka
 
 # 3. Read the list's feed
-python3 scripts/xpost.py list-tweets LIST_ID -n 20
+python3 scripts/x-api-skill.py list-tweets LIST_ID -n 20
 ```
 
 ### Analyze engagement on a tweet
 
 ```bash
 # 1. Get the tweet
-python3 scripts/xpost.py get TWEET_ID
+python3 scripts/x-api-skill.py get TWEET_ID
 
 # 2. See who liked it
-python3 scripts/xpost.py liking-users TWEET_ID
+python3 scripts/x-api-skill.py liking-users TWEET_ID
 
 # 3. See who retweeted it
-python3 scripts/xpost.py retweeters TWEET_ID
+python3 scripts/x-api-skill.py retweeters TWEET_ID
 
 # 4. See quote tweets
-python3 scripts/xpost.py quotes TWEET_ID
+python3 scripts/x-api-skill.py quotes TWEET_ID
 ```
 
 ### Research a user
 
 ```bash
 # 1. Profile info
-python3 scripts/xpost.py user elonmusk
+python3 scripts/x-api-skill.py user elonmusk
 
 # 2. Recent tweets
-python3 scripts/xpost.py user-timeline elonmusk -n 10
+python3 scripts/x-api-skill.py user-timeline elonmusk -n 10
 
 # 3. Who follows them
-python3 scripts/xpost.py followers elonmusk -n 100
+python3 scripts/x-api-skill.py followers elonmusk -n 100
 
 # 4. Who they follow
-python3 scripts/xpost.py following elonmusk -n 100
+python3 scripts/x-api-skill.py following elonmusk -n 100
 
 # 5. What they like
-python3 scripts/xpost.py liked elonmusk -n 20
+python3 scripts/x-api-skill.py liked elonmusk -n 20
 ```
 
 ---

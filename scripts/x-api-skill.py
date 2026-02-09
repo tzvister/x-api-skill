@@ -8,38 +8,38 @@ Supports three authentication methods:
   - OAuth 2.0 PKCE: User context for bookmarks
 
 Usage:
-  python3 scripts/xpost.py tweet "Hello world"
-  python3 scripts/xpost.py reply <tweet-id> "Reply text"
-  python3 scripts/xpost.py get <tweet-id>
-  python3 scripts/xpost.py thread <tweet-id> [-n 20]
-  python3 scripts/xpost.py like <tweet-id>
-  python3 scripts/xpost.py unlike <tweet-id>
-  python3 scripts/xpost.py follow <username>
-  python3 scripts/xpost.py mute <username>
-  python3 scripts/xpost.py unmute <username>
-  python3 scripts/xpost.py block <username>
-  python3 scripts/xpost.py unblock <username>
-  python3 scripts/xpost.py search "query" [-n 10]
-  python3 scripts/xpost.py search-all "query" [-n 10]       (Pro access)
-  python3 scripts/xpost.py mentions [-n 10]
-  python3 scripts/xpost.py timeline [-n 10]
-  python3 scripts/xpost.py user <username>
-  python3 scripts/xpost.py user-timeline <username> [-n 10] [--include-rts]
-  python3 scripts/xpost.py thread-chain <tweet-id> [-n 20]
-  python3 scripts/xpost.py quotes <tweet-id> [-n 10]
-  python3 scripts/xpost.py auth                              (OAuth 2.0 PKCE setup)
-  python3 scripts/xpost.py bookmarks [-n 20]
-  python3 scripts/xpost.py bookmark <tweet-id>
-  python3 scripts/xpost.py unbookmark <tweet-id>
-  python3 scripts/xpost.py stream-rules-add "rule" [--tag TAG]
-  python3 scripts/xpost.py stream-rules-list
-  python3 scripts/xpost.py stream-rules-delete <rule-id>
-  python3 scripts/xpost.py stream-filter [-n 10]             (Pro access)
-  python3 scripts/xpost.py stream-sample [-n 10]             (Pro access)
-  python3 scripts/xpost.py profile "new bio text"
-  python3 scripts/xpost.py delete <tweet-id>
-  python3 scripts/xpost.py verify
-  python3 scripts/xpost.py me
+  python3 scripts/x-api-skill.py tweet "Hello world"
+  python3 scripts/x-api-skill.py reply <tweet-id> "Reply text"
+  python3 scripts/x-api-skill.py get <tweet-id>
+  python3 scripts/x-api-skill.py thread <tweet-id> [-n 20]
+  python3 scripts/x-api-skill.py like <tweet-id>
+  python3 scripts/x-api-skill.py unlike <tweet-id>
+  python3 scripts/x-api-skill.py follow <username>
+  python3 scripts/x-api-skill.py mute <username>
+  python3 scripts/x-api-skill.py unmute <username>
+  python3 scripts/x-api-skill.py block <username>
+  python3 scripts/x-api-skill.py unblock <username>
+  python3 scripts/x-api-skill.py search "query" [-n 10]
+  python3 scripts/x-api-skill.py search-all "query" [-n 10]       (Pro access)
+  python3 scripts/x-api-skill.py mentions [-n 10]
+  python3 scripts/x-api-skill.py timeline [-n 10]
+  python3 scripts/x-api-skill.py user <username>
+  python3 scripts/x-api-skill.py user-timeline <username> [-n 10] [--include-rts]
+  python3 scripts/x-api-skill.py thread-chain <tweet-id> [-n 20]
+  python3 scripts/x-api-skill.py quotes <tweet-id> [-n 10]
+  python3 scripts/x-api-skill.py auth                              (OAuth 2.0 PKCE setup)
+  python3 scripts/x-api-skill.py bookmarks [-n 20]
+  python3 scripts/x-api-skill.py bookmark <tweet-id>
+  python3 scripts/x-api-skill.py unbookmark <tweet-id>
+  python3 scripts/x-api-skill.py stream-rules-add "rule" [--tag TAG]
+  python3 scripts/x-api-skill.py stream-rules-list
+  python3 scripts/x-api-skill.py stream-rules-delete <rule-id>
+  python3 scripts/x-api-skill.py stream-filter [-n 10]             (Pro access)
+  python3 scripts/x-api-skill.py stream-sample [-n 10]             (Pro access)
+  python3 scripts/x-api-skill.py profile "new bio text"
+  python3 scripts/x-api-skill.py delete <tweet-id>
+  python3 scripts/x-api-skill.py verify
+  python3 scripts/x-api-skill.py me
 
 Requires: pip install requests requests-oauthlib
 """
@@ -60,7 +60,7 @@ except ImportError:
     pass
 
 API_BASE = "https://api.x.com/2"
-TOKEN_FILE = os.path.expanduser("~/.xpost/tokens.json")
+TOKEN_FILE = os.path.expanduser("~/.x-api-skill/tokens.json")
 
 
 # ── Authentication: OAuth 1.0a ──
@@ -215,7 +215,7 @@ def _refresh_pkce_token(refresh_token):
     resp = requests.post("https://api.x.com/2/oauth2/token", data=data, auth=auth)
     if not resp.ok:
         print(f"Error refreshing token: {resp.status_code} {resp.text}", file=sys.stderr)
-        print("Run 'xpost auth' to re-authorize.", file=sys.stderr)
+        print("Run 'x-api-skill auth' to re-authorize.", file=sys.stderr)
         sys.exit(1)
 
     result = resp.json()
@@ -234,14 +234,14 @@ def _get_oauth2_pkce_token():
 
     tokens = _load_pkce_tokens()
     if not tokens:
-        print("Error: No OAuth 2.0 tokens found. Run 'xpost auth' first.", file=sys.stderr)
+        print("Error: No OAuth 2.0 tokens found. Run 'x-api-skill auth' first.", file=sys.stderr)
         sys.exit(1)
 
     # Check expiry (refresh 60s before actual expiry)
     if time.time() >= tokens.get("expires_at", 0) - 60:
         refresh = tokens.get("refresh_token")
         if not refresh:
-            print("Error: No refresh token. Run 'xpost auth' to re-authorize.", file=sys.stderr)
+            print("Error: No refresh token. Run 'x-api-skill auth' to re-authorize.", file=sys.stderr)
             sys.exit(1)
         return _refresh_pkce_token(refresh)
 

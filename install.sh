@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# xpost skill installer for OpenClaw / Claude Code / Codex / Copilot / AgentSkills
-# Asks for target platform, then installs SKILL.md, xpost.py, and test_runner.py.
+# x-api-skill installer for OpenClaw / Claude Code / Codex / Copilot / AgentSkills
+# Asks for target platform, then installs SKILL.md, x-api-skill.py, and test_runner.py.
 # Walks the user through API key setup interactively.
 #
 # Non-interactive mode (for agents / CI):
-#   XPOST_SKILL_DIR=~/.claude/skills/xpost bash install.sh --non-interactive
-#   Override branch: XPOST_BRANCH=support-bearer bash install.sh
+#   X_API_SKILL_DIR=~/.claude/skills/x-api-skill bash install.sh --non-interactive
 #   Pre-set X_CONSUMER_KEY, X_CONSUMER_SECRET, etc. as env vars.
 
 set -euo pipefail
 
-SKILL_NAME="xpost"
-REPO="tzvister/xpost"
-BRANCH="${XPOST_BRANCH:-master}"
-BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH"
+SKILL_NAME="x-api-skill"
+BASE_URL="https://raw.githubusercontent.com/tzvister/x-api-skill/master"
 
 # ── Detect interactive vs non-interactive mode ──
 INTERACTIVE=true
@@ -38,22 +35,22 @@ else
 fi
 
 echo ""
-echo -e "  ${BOLD}${CYAN}xpost — X/Twitter CLI for AI agents${RESET}"
+echo -e "  ${BOLD}${CYAN}x-api-skill — X/Twitter CLI for AI agents${RESET}"
 echo -e "  ${CYAN}────────────────────────────────────${RESET}"
 echo ""
 
 # ── 0. Determine install target ──
 if [ "$INTERACTIVE" = true ]; then
-  # Check if XPOST_SKILL_DIR was pre-set (skip menu)
-  if [ -n "${XPOST_SKILL_DIR:-}" ]; then
-    SKILL_DIR="$XPOST_SKILL_DIR"
+  # Check if X_API_SKILL_DIR was pre-set (skip menu)
+  if [ -n "${X_API_SKILL_DIR:-}" ]; then
+    SKILL_DIR="$X_API_SKILL_DIR"
   else
     echo -e "  ${BOLD}Where are you installing this skill?${RESET}"
     echo ""
-    echo -e "    ${BOLD}1${RESET}  OpenClaw       ${DIM}~/.openclaw/skills/xpost/${RESET}"
-    echo -e "    ${BOLD}2${RESET}  Claude Code    ${DIM}~/.claude/skills/xpost/${RESET}"
-    echo -e "    ${BOLD}3${RESET}  Codex          ${DIM}~/.codex/skills/xpost/${RESET}"
-    echo -e "    ${BOLD}4${RESET}  Copilot        ${DIM}~/.copilot/skills/xpost/${RESET}"
+    echo -e "    ${BOLD}1${RESET}  OpenClaw       ${DIM}~/.openclaw/skills/x-api-skill/${RESET}"
+    echo -e "    ${BOLD}2${RESET}  Claude Code    ${DIM}~/.claude/skills/x-api-skill/${RESET}"
+    echo -e "    ${BOLD}3${RESET}  Codex          ${DIM}~/.codex/skills/x-api-skill/${RESET}"
+    echo -e "    ${BOLD}4${RESET}  Copilot        ${DIM}~/.copilot/skills/x-api-skill/${RESET}"
     echo -e "    ${BOLD}5${RESET}  Custom path"
     echo ""
     echo -ne "  ${YELLOW}Choose [1-5]${RESET} [${BOLD}1${RESET}]: "
@@ -79,8 +76,8 @@ if [ "$INTERACTIVE" = true ]; then
     esac
   fi
 else
-  # Non-interactive: use XPOST_SKILL_DIR or default to OpenClaw
-  SKILL_DIR="${XPOST_SKILL_DIR:-$HOME/.openclaw/skills/$SKILL_NAME}"
+  # Non-interactive: use X_API_SKILL_DIR or default to OpenClaw
+  SKILL_DIR="${X_API_SKILL_DIR:-$HOME/.openclaw/skills/$SKILL_NAME}"
 fi
 
 ENV_FILE="$SKILL_DIR/.env"
@@ -95,14 +92,14 @@ mkdir -p "$SKILL_DIR/scripts"
 # Detect local repo: if SKILL.md exists next to install.sh, copy instead of download
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -f "$SCRIPT_DIR/SKILL.md" ] && [ -f "$SCRIPT_DIR/scripts/xpost.py" ]; then
+if [ -f "$SCRIPT_DIR/SKILL.md" ] && [ -f "$SCRIPT_DIR/scripts/x-api-skill.py" ]; then
   echo -e "  ${DIM}Copying files from local repo...${RESET}"
 
   cp "$SCRIPT_DIR/SKILL.md" "$SKILL_DIR/SKILL.md"
   echo "    SKILL.md"
 
-  cp "$SCRIPT_DIR/scripts/xpost.py" "$SKILL_DIR/scripts/xpost.py"
-  echo "    scripts/xpost.py"
+  cp "$SCRIPT_DIR/scripts/x-api-skill.py" "$SKILL_DIR/scripts/x-api-skill.py"
+  echo "    scripts/x-api-skill.py"
 
   if [ -f "$SCRIPT_DIR/test_runner.py" ]; then
     cp "$SCRIPT_DIR/test_runner.py" "$SKILL_DIR/test_runner.py"
@@ -114,8 +111,8 @@ else
   curl -fsSL "$BASE_URL/SKILL.md" -o "$SKILL_DIR/SKILL.md"
   echo "    SKILL.md"
 
-  curl -fsSL "$BASE_URL/scripts/xpost.py" -o "$SKILL_DIR/scripts/xpost.py"
-  echo "    scripts/xpost.py"
+  curl -fsSL "$BASE_URL/scripts/x-api-skill.py" -o "$SKILL_DIR/scripts/x-api-skill.py"
+  echo "    scripts/x-api-skill.py"
 
   # test_runner.py is optional — don't fail if it's not available
   if curl -fsSL "$BASE_URL/test_runner.py" -o "$SKILL_DIR/test_runner.py" 2>/dev/null; then
@@ -265,7 +262,7 @@ X_ACCESS_TOKEN_SECRET="${ACCESS_SECRET}"
 X_BEARER_TOKEN="${BEARER_TOKEN}"
 
 # === OAuth 2.0 PKCE (optional — bookmarks) ===
-# After setting these, run: python3 scripts/xpost.py auth
+# After setting these, run: python3 scripts/x-api-skill.py auth
 X_CLIENT_ID="${CLIENT_ID}"
 X_CLIENT_SECRET="${CLIENT_SECRET}"
 ENVEOF
@@ -282,7 +279,7 @@ if [ -n "$CONSUMER_KEY" ] && [ -n "$ACCESS_TOKEN" ]; then
   export X_ACCESS_TOKEN="$ACCESS_TOKEN"
   export X_ACCESS_TOKEN_SECRET="$ACCESS_SECRET"
 
-  if python3 "$SKILL_DIR/scripts/xpost.py" verify 2>/dev/null; then
+  if python3 "$SKILL_DIR/scripts/x-api-skill.py" verify 2>/dev/null; then
     echo -e "  ${GREEN}Authentication verified!${RESET}"
   else
     echo -e "  ${YELLOW}Could not verify — double-check your keys in $ENV_FILE${RESET}"
@@ -303,20 +300,20 @@ if [ -n "$CLIENT_ID" ] && [ "$INTERACTIVE" = true ]; then
     export X_CLIENT_SECRET="$CLIENT_SECRET"
     echo ""
     echo -e "  ${DIM}Starting auth flow — check your browser...${RESET}"
-    if python3 "$SKILL_DIR/scripts/xpost.py" auth; then
-      echo -e "  ${GREEN}Bookmark auth complete! Tokens saved to ~/.xpost/tokens.json${RESET}"
+    if python3 "$SKILL_DIR/scripts/x-api-skill.py" auth; then
+      echo -e "  ${GREEN}Bookmark auth complete! Tokens saved to ~/.x-api-skill/tokens.json${RESET}"
     else
       echo -e "  ${YELLOW}Auth flow did not complete. You can retry later:${RESET}"
-      echo -e "    python3 $SKILL_DIR/scripts/xpost.py auth"
+      echo -e "    python3 $SKILL_DIR/scripts/x-api-skill.py auth"
     fi
   else
     echo -e "  ${DIM}Skipped. Run this later to enable bookmarks:${RESET}"
-    echo -e "    python3 $SKILL_DIR/scripts/xpost.py auth"
+    echo -e "    python3 $SKILL_DIR/scripts/x-api-skill.py auth"
   fi
 elif [ -n "$CLIENT_ID" ]; then
   echo ""
   echo "  Bookmark auth requires interactive mode. Run manually:"
-  echo "    python3 $SKILL_DIR/scripts/xpost.py auth"
+  echo "    python3 $SKILL_DIR/scripts/x-api-skill.py auth"
 fi
 
 # ── 7. Summary ──
@@ -335,12 +332,12 @@ if [ "$FILLED" -eq 3 ]; then
 elif [ "$FILLED" -gt 0 ]; then
   echo -e "  ${DIM}Some credentials were skipped — edit $ENV_FILE to add them later.${RESET}"
 else
-  echo -e "  ${YELLOW}No credentials entered — edit $ENV_FILE before using xpost.${RESET}"
+  echo -e "  ${YELLOW}No credentials entered — edit $ENV_FILE before using x-api-skill.${RESET}"
 fi
 
 echo ""
 echo -e "  ${BOLD}Quick start:${RESET}"
-echo -e "    python3 $SKILL_DIR/scripts/xpost.py --help"
-echo -e "    python3 $SKILL_DIR/scripts/xpost.py verify"
+echo -e "    python3 $SKILL_DIR/scripts/x-api-skill.py --help"
+echo -e "    python3 $SKILL_DIR/scripts/x-api-skill.py verify"
 echo -e "    python3 $SKILL_DIR/test_runner.py"
 echo ""
