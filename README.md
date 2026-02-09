@@ -1,6 +1,10 @@
-# xpost
+<p align="center">
+  <img src="assets/banner.png" alt="xpost — X/Twitter CLI for AI agents" width="600">
+</p>
 
-X/Twitter CLI for AI agents. Post, read, search, and engage on X using the official v2 API with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE.
+<p align="center">
+  Post, read, search, and engage on X using the official v2 API with OAuth 1.0a, Bearer Token, and OAuth 2.0 PKCE.
+</p>
 
 Extended fork of [syn-ack-ai/xpost](https://github.com/syn-ack-ai/xpost) — adds Bearer Token auth, OAuth 2.0 PKCE, 23 new commands, and full X API v2 coverage.
 
